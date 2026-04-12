@@ -1,3 +1,6 @@
+# App
+backend/data
+
 # Python
 __pycache__/
 *.py[cod]
