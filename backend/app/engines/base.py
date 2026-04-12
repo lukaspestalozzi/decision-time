@@ -23,6 +23,7 @@ class BracketMatchupContext(BaseModel):
 
 class CondorcetMatchupContext(BaseModel):
     type: Literal["condorcet_matchup"] = "condorcet_matchup"
+    matchup_id: str
     entry_a: dict[str, Any]
     entry_b: dict[str, Any]
     matchup_number: int

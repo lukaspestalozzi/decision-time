@@ -6,6 +6,9 @@ from uuid import UUID
 
 from app.engines.base import TournamentEngine, VoteContext
 from app.engines.bracket import BracketEngine
+from app.engines.condorcet import CondorcetEngine
+from app.engines.multivote import MultivoteEngine
+from app.engines.score import ScoreEngine
 from app.exceptions import InvalidStateError, ValidationError
 from app.repositories.options import OptionRepository
 from app.repositories.tournaments import TournamentRepository
@@ -23,6 +26,9 @@ class TournamentService:
     def _get_engine(self, mode: TournamentMode) -> TournamentEngine:
         engines: dict[TournamentMode, TournamentEngine] = {
             TournamentMode.BRACKET: BracketEngine(),
+            TournamentMode.SCORE: ScoreEngine(),
+            TournamentMode.MULTIVOTE: MultivoteEngine(),
+            TournamentMode.CONDORCET: CondorcetEngine(),
         }
         engine = engines.get(mode)
         if engine is None:
