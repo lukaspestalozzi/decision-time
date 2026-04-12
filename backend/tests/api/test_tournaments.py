@@ -1,0 +1,306 @@
+"""API tests for tournament endpoints + full bracket flow test."""
+
+from fastapi.testclient import TestClient
+
+
+def _create_options(client: TestClient, count: int) -> list[dict]:
+    """Helper: create N options and return their JSON dicts."""
+    options = []
+    for i in range(count):
+        resp = client.post("/api/v1/options", json={"name": f"Option {i + 1}"})
+        assert resp.status_code == 201
+        options.append(resp.json())
+    return options
+
+
+class TestTournamentCRUD:
+    def test_create_tournament_returns_201_with_defaults(self, client: TestClient) -> None:
+        resp = client.post("/api/v1/tournaments", json={"name": "Test", "mode": "bracket"})
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["name"] == "Test"
+        assert data["mode"] == "bracket"
+        assert data["status"] == "draft"
+        assert data["version"] == 1
+        assert data["config"]["shuffle_seed"] is True
+
+    def test_create_tournament_requires_name_and_mode(self, client: TestClient) -> None:
+        resp = client.post("/api/v1/tournaments", json={"name": "Test"})
+        assert resp.status_code == 422
+
+    def test_get_tournament_returns_created(self, client: TestClient) -> None:
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        resp = client.get(f"/api/v1/tournaments/{tid}")
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "T"
+
+    def test_list_tournaments_filter_by_status(self, client: TestClient) -> None:
+        client.post("/api/v1/tournaments", json={"name": "A", "mode": "bracket"})
+        client.post("/api/v1/tournaments", json={"name": "B", "mode": "bracket"})
+        resp = client.get("/api/v1/tournaments", params={"status": "draft"})
+        assert len(resp.json()) == 2
+
+    def test_update_tournament_draft_only(self, client: TestClient) -> None:
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        resp = client.put(f"/api/v1/tournaments/{tid}", json={"version": 1, "name": "Updated"})
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Updated"
+        assert resp.json()["version"] == 2
+
+    def test_update_tournament_stale_version_returns_409(self, client: TestClient) -> None:
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        client.put(f"/api/v1/tournaments/{tid}", json={"version": 1, "name": "V2"})
+        resp = client.put(f"/api/v1/tournaments/{tid}", json={"version": 1, "name": "Stale"})
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "CONFLICT"
+
+    def test_delete_tournament_returns_204(self, client: TestClient) -> None:
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        resp = client.delete(f"/api/v1/tournaments/{tid}")
+        assert resp.status_code == 204
+
+
+class TestTournamentLifecycle:
+    def test_activate_requires_minimum_2_options(self, client: TestClient) -> None:
+        options = _create_options(client, 1)
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        client.put(f"/api/v1/tournaments/{tid}", json={"version": 1, "selected_option_ids": [options[0]["id"]]})
+        resp = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": 2})
+        assert resp.status_code == 422
+        assert "at least 2" in resp.json()["error"]["message"]
+
+    def test_activate_snapshots_options_into_entries(self, client: TestClient) -> None:
+        options = _create_options(client, 3)
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        client.put(f"/api/v1/tournaments/{tid}", json={"version": 1, "selected_option_ids": [o["id"] for o in options]})
+        resp = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": 2})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "active"
+        assert len(data["entries"]) == 3
+
+    def test_activate_ignores_deleted_options(self, client: TestClient) -> None:
+        options = _create_options(client, 3)
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        client.put(f"/api/v1/tournaments/{tid}", json={"version": 1, "selected_option_ids": [o["id"] for o in options]})
+        # Delete one option
+        client.delete(f"/api/v1/options/{options[0]['id']}")
+        resp = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": 2})
+        assert resp.status_code == 200
+        assert len(resp.json()["entries"]) == 2
+
+    def test_cancel_from_draft(self, client: TestClient) -> None:
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        resp = client.post(f"/api/v1/tournaments/{tid}/cancel", json={"version": 1})
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "cancelled"
+
+    def test_cancel_from_active(self, client: TestClient) -> None:
+        options = _create_options(client, 2)
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        client.put(f"/api/v1/tournaments/{tid}", json={"version": 1, "selected_option_ids": [o["id"] for o in options]})
+        client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": 2})
+        resp = client.post(f"/api/v1/tournaments/{tid}/cancel", json={"version": 3})
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "cancelled"
+
+    def test_clone_creates_new_draft(self, client: TestClient) -> None:
+        options = _create_options(client, 2)
+        create = client.post("/api/v1/tournaments", json={"name": "Original", "mode": "bracket"})
+        tid = create.json()["id"]
+        client.put(f"/api/v1/tournaments/{tid}", json={"version": 1, "selected_option_ids": [o["id"] for o in options]})
+        resp = client.post(f"/api/v1/tournaments/{tid}/clone")
+        assert resp.status_code == 201
+        clone = resp.json()
+        assert clone["name"] == "Original (copy)"
+        assert clone["status"] == "draft"
+        assert clone["id"] != tid
+        assert len(clone["selected_option_ids"]) == 2
+
+
+class TestTournamentVoting:
+    def _setup_active_bracket(self, client: TestClient, num_options: int = 4) -> tuple[str, int]:
+        """Helper: create options, tournament, activate. Returns (tournament_id, version)."""
+        options = _create_options(client, num_options)
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={
+                "version": 1,
+                "selected_option_ids": [o["id"] for o in options],
+                "config": {"shuffle_seed": False},
+            },
+        )
+        resp = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": 2})
+        return tid, resp.json()["version"]
+
+    def test_vote_context_returns_bracket_matchup(self, client: TestClient) -> None:
+        tid, _ = self._setup_active_bracket(client)
+        resp = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "default"})
+        assert resp.status_code == 200
+        ctx = resp.json()
+        assert ctx["type"] == "bracket_matchup"
+        assert "matchup_id" in ctx
+        assert ctx["round"] == 1
+
+    def test_submit_vote_updates_state(self, client: TestClient) -> None:
+        tid, version = self._setup_active_bracket(client)
+        ctx = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "default"}).json()
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/vote",
+            json={
+                "version": version,
+                "voter_label": "default",
+                "payload": {"matchup_id": ctx["matchup_id"], "winner_entry_id": ctx["entry_a"]["id"]},
+            },
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()["votes"]) == 1
+
+    def test_submit_vote_stale_version_returns_409(self, client: TestClient) -> None:
+        tid, version = self._setup_active_bracket(client)
+        ctx = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "default"}).json()
+        # Vote successfully
+        client.post(
+            f"/api/v1/tournaments/{tid}/vote",
+            json={
+                "version": version,
+                "voter_label": "default",
+                "payload": {"matchup_id": ctx["matchup_id"], "winner_entry_id": ctx["entry_a"]["id"]},
+            },
+        )
+        # Try again with stale version
+        ctx2 = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "default"}).json()
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/vote",
+            json={
+                "version": version,  # stale
+                "voter_label": "default",
+                "payload": {"matchup_id": ctx2["matchup_id"], "winner_entry_id": ctx2["entry_a"]["id"]},
+            },
+        )
+        assert resp.status_code == 409
+
+    def test_vote_on_draft_returns_409(self, client: TestClient) -> None:
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/vote", json={"version": 1, "voter_label": "default", "payload": {}}
+        )
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "INVALID_STATE"
+
+    def test_get_result_before_complete_returns_409(self, client: TestClient) -> None:
+        tid, _ = self._setup_active_bracket(client)
+        resp = client.get(f"/api/v1/tournaments/{tid}/result")
+        assert resp.status_code == 409
+
+    def test_get_state_returns_engine_state(self, client: TestClient) -> None:
+        tid, _ = self._setup_active_bracket(client)
+        resp = client.get(f"/api/v1/tournaments/{tid}/state")
+        assert resp.status_code == 200
+        state = resp.json()
+        assert "rounds" in state
+        assert "current_round" in state
+
+
+class TestFullBracketFlow:
+    def test_full_bracket_flow_4_options(self, client: TestClient) -> None:
+        """Full flow: create options → create tournament → add options → activate → vote all → verify result."""
+        # Step 1: Create 4 options
+        options = _create_options(client, 4)
+        option_ids = [o["id"] for o in options]
+
+        # Step 2: Create a bracket tournament
+        resp = client.post("/api/v1/tournaments", json={"name": "Test Bracket", "mode": "bracket"})
+        assert resp.status_code == 201
+        tournament = resp.json()
+        tid = tournament["id"]
+        assert tournament["status"] == "draft"
+        assert tournament["version"] == 1
+
+        # Step 3: Add options to tournament (disable shuffle for determinism)
+        resp = client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={
+                "version": 1,
+                "selected_option_ids": option_ids,
+                "config": {"shuffle_seed": False},
+            },
+        )
+        assert resp.status_code == 200
+        tournament = resp.json()
+        assert tournament["version"] == 2
+
+        # Step 4: Activate tournament
+        resp = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": 2})
+        assert resp.status_code == 200
+        tournament = resp.json()
+        assert tournament["status"] == "active"
+        assert len(tournament["entries"]) == 4
+        assert tournament["state"]["total_rounds"] == 2
+        version = tournament["version"]
+
+        # Step 5: Vote through all matchups
+        # Round 1 (Semi-finals): 2 matchups
+        for _ in range(2):
+            ctx = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "default"}).json()
+            assert ctx["type"] == "bracket_matchup"
+            assert ctx["round"] == 1
+            resp = client.post(
+                f"/api/v1/tournaments/{tid}/vote",
+                json={
+                    "version": version,
+                    "voter_label": "default",
+                    "payload": {"matchup_id": ctx["matchup_id"], "winner_entry_id": ctx["entry_a"]["id"]},
+                },
+            )
+            assert resp.status_code == 200
+            version = resp.json()["version"]
+
+        # Round 2 (Final): 1 matchup
+        ctx = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "default"}).json()
+        assert ctx["type"] == "bracket_matchup"
+        assert ctx["round"] == 2
+        assert ctx["round_name"] == "Final"
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/vote",
+            json={
+                "version": version,
+                "voter_label": "default",
+                "payload": {"matchup_id": ctx["matchup_id"], "winner_entry_id": ctx["entry_a"]["id"]},
+            },
+        )
+        assert resp.status_code == 200
+        tournament = resp.json()
+        assert tournament["status"] == "completed"
+
+        # Step 6: Verify result
+        resp = client.get(f"/api/v1/tournaments/{tid}/result")
+        assert resp.status_code == 200
+        result = resp.json()
+        assert len(result["winner_ids"]) == 1
+        assert len(result["ranking"]) == 4
+        ranks = sorted(r["rank"] for r in result["ranking"])
+        assert ranks == [1, 2, 3, 3]
+
+        # Verify vote context after completion shows completed
+        ctx = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "default"}).json()
+        assert ctx["type"] == "completed"
+
+
+class TestHealthEndpoint:
+    def test_health_returns_ok(self, client: TestClient) -> None:
+        resp = client.get("/api/v1/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
