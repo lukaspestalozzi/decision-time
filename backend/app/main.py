@@ -1,9 +1,12 @@
 """FastAPI application setup."""
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError as PydanticValidationError
 
 from app.config import load_config
@@ -66,3 +69,8 @@ async def handle_pydantic_error(request: Request, exc: PydanticValidationError) 
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(options.router, prefix="/api/v1")
 app.include_router(tournaments.router, prefix="/api/v1")
+
+# Serve Angular static files (must be AFTER API routes so /api/* takes precedence)
+_static_dir = Path("static")
+if _static_dir.exists():
+    app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="static")

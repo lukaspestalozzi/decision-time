@@ -2,7 +2,7 @@
 
 # Development
 dev-backend:
-	cd backend && uv run uvicorn app.main:app --reload --port 8009
+	cd backend && DATA_DIR=./data uv run uvicorn app.main:app --reload --port 8009
 
 dev-frontend:
 	cd frontend && npx ng serve --proxy-config proxy.conf.json

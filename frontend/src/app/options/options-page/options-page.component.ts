@@ -14,6 +14,7 @@ import { Option } from '../../models/option.model';
 import { OptionCardComponent } from '../../shared/option-card/option-card.component';
 import { OptionSearchComponent, SearchCriteria } from '../../shared/option-search/option-search.component';
 import { OptionDialogComponent, OptionDialogResult } from '../option-dialog/option-dialog.component';
+import { BulkImportDialogComponent, BulkImportResult } from '../bulk-import-dialog/bulk-import-dialog.component';
 
 @Component({
   selector: 'app-options-page',
@@ -75,6 +76,21 @@ export class OptionsPageComponent implements OnInit {
           this.loadOptions();
         },
         error: () => this.notify.showError('Failed to create option.'),
+      });
+    });
+  }
+
+  openBulkImportDialog(): void {
+    const dialogRef = this.dialog.open(BulkImportDialogComponent, { width: '550px' });
+
+    dialogRef.afterClosed().subscribe((result: BulkImportResult | undefined) => {
+      if (!result) return;
+      this.api.bulkCreateOptions({ names: result.names, tags: result.tags }).subscribe({
+        next: (created) => {
+          this.notify.showSuccess(`Created ${created.length} options.`);
+          this.loadOptions();
+        },
+        error: () => this.notify.showError('Bulk import failed.'),
       });
     });
   }

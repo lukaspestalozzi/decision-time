@@ -1,0 +1,34 @@
+<h2 mat-dialog-title>Bulk Import Options</h2>
+
+<mat-dialog-content>
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Paste option names (one per line)</mat-label>
+    <textarea matInput rows="10" [ngModel]="rawText()" (ngModelChange)="rawText.set($event)"
+      placeholder="Luna&#10;Mira&#10;Nova&#10;Stella"></textarea>
+  </mat-form-field>
+
+  <p class="count">{{ parsedNames().length }} options will be imported</p>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Tags (applied to all)</mat-label>
+    <mat-chip-grid #chipGrid>
+      @for (tag of tags(); track tag) {
+        <mat-chip-row (removed)="removeTag(tag)">
+          {{ tag }}
+          <mat-icon matChipRemove>cancel</mat-icon>
+        </mat-chip-row>
+      }
+    </mat-chip-grid>
+    <input matInput placeholder="Add tag..."
+      [matChipInputFor]="chipGrid"
+      [matChipInputSeparatorKeyCodes]="separatorKeyCodes"
+      (matChipInputTokenEnd)="addTag($event)" />
+  </mat-form-field>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()">Cancel</button>
+  <button mat-raised-button color="primary" [disabled]="parsedNames().length === 0" (click)="submit()">
+    Import {{ parsedNames().length }} Options
+  </button>
+</mat-dialog-actions>

@@ -4,9 +4,12 @@
   align-items: center;
   margin-bottom: 16px;
 
-  h1 {
-    margin: 0;
-  }
+  h1 { margin: 0; }
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .loading-container {
