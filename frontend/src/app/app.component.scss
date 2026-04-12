@@ -1,0 +1,19 @@
+.app-title {
+  font-weight: 500;
+  margin-right: 32px;
+}
+
+.nav-links a {
+  text-transform: uppercase;
+  font-size: 14px;
+}
+
+.nav-links a.active {
+  border-bottom: 2px solid white;
+}
+
+.content {
+  max-width: 1200px;
+  margin: 24px auto;
+  padding: 0 16px;
+}

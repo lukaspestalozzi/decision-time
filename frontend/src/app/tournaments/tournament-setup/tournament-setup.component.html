@@ -1,0 +1,337 @@
+<div class="setup-container">
+  <h1>New Tournament</h1>
+
+  <mat-stepper #stepper linear>
+    <!-- Step 1: Name + Mode -->
+    <mat-step [completed]="tournament() !== null" [editable]="false">
+      <ng-template matStepLabel>Name &amp; Mode</ng-template>
+
+      <div class="step-content">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Tournament Name</mat-label>
+          <input matInput
+                 [value]="name()"
+                 (input)="name.set($any($event.target).value)"
+                 maxlength="256"
+                 required
+                 placeholder="e.g. Best Programming Language">
+          <mat-hint align="end">{{ name().length }} / 256</mat-hint>
+          @if (name().trim().length === 0) {
+            <mat-error>Name is required</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Description (optional)</mat-label>
+          <textarea matInput
+                    [value]="description()"
+                    (input)="description.set($any($event.target).value)"
+                    rows="3"
+                    placeholder="What is this tournament about?"></textarea>
+        </mat-form-field>
+
+        <h3>Select Mode</h3>
+        <div class="mode-grid">
+          @for (m of modes; track m.value) {
+            <mat-card [class.mode-selected]="mode() === m.value"
+                      (click)="mode.set(m.value)"
+                      class="mode-card"
+                      appearance="outlined">
+              <mat-card-header>
+                <mat-icon mat-card-avatar class="mode-icon">{{ m.icon }}</mat-icon>
+                <mat-card-title>{{ m.label }}</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <p>{{ m.description }}</p>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+        @if (mode() === null) {
+          <p class="hint-text">Please select a tournament mode to continue.</p>
+        }
+
+        <div class="step-actions">
+          <button mat-flat-button
+                  color="primary"
+                  [disabled]="!step1Valid() || creatingTournament()"
+                  (click)="createTournament()">
+            @if (creatingTournament()) {
+              <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+              Next
+            }
+          </button>
+        </div>
+      </div>
+    </mat-step>
+
+    <!-- Step 2: Select Options -->
+    <mat-step [completed]="step2Completed()" [editable]="false">
+      <ng-template matStepLabel>Select Options</ng-template>
+
+      <div class="step-content">
+        @if (loadingOptions()) {
+          <div class="loading-container">
+            <mat-spinner diameter="40"></mat-spinner>
+            <p>Loading options...</p>
+          </div>
+        } @else {
+          <div class="options-layout">
+            <div class="options-available">
+              <h3>Available Options</h3>
+
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Search options</mat-label>
+                <input matInput
+                       [value]="searchQuery()"
+                       (input)="onSearchInput($event)"
+                       placeholder="Filter by name or tag">
+                <mat-icon matSuffix>search</mat-icon>
+              </mat-form-field>
+
+              @if (allTags().length > 0) {
+                <mat-chip-set class="tag-filter">
+                  @for (tag of allTags(); track tag) {
+                    <mat-chip [highlighted]="selectedTag() === tag"
+                              (click)="toggleTag(tag)">
+                      {{ tag }}
+                    </mat-chip>
+                  }
+                </mat-chip-set>
+              }
+
+              <div class="option-list">
+                @for (opt of filteredOptions(); track opt.id) {
+                  <mat-card class="option-item"
+                            [class.option-selected]="isSelected(opt.id)"
+                            (click)="toggleOption(opt.id)"
+                            appearance="outlined">
+                    <mat-card-content class="option-item-content">
+                      <div class="option-info">
+                        <span class="option-name">{{ opt.name }}</span>
+                        @if (opt.tags.length > 0) {
+                          <span class="option-tags">
+                            @for (tag of opt.tags; track tag) {
+                              <span class="tag-chip">{{ tag }}</span>
+                            }
+                          </span>
+                        }
+                      </div>
+                      <mat-icon class="select-icon">
+                        {{ isSelected(opt.id) ? 'check_circle' : 'radio_button_unchecked' }}
+                      </mat-icon>
+                    </mat-card-content>
+                  </mat-card>
+                } @empty {
+                  <p class="empty-text">No options found. Create some options first.</p>
+                }
+              </div>
+            </div>
+
+            <div class="options-selected">
+              <h3>Selected ({{ selectedOptionIds().size }})</h3>
+              @if (selectedOptionIds().size < 2) {
+                <p class="validation-hint">Select at least 2 options to continue.</p>
+              }
+              <div class="selected-list">
+                @for (opt of selectedOptions(); track opt.id) {
+                  <div class="selected-item">
+                    <span>{{ opt.name }}</span>
+                    <button mat-icon-button (click)="removeOption(opt.id)" aria-label="Remove option">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  </div>
+                } @empty {
+                  <p class="empty-text">No options selected yet.</p>
+                }
+              </div>
+            </div>
+          </div>
+        }
+
+        <div class="step-actions">
+          <button mat-button (click)="stepper.previous()">Back</button>
+          <button mat-flat-button
+                  color="primary"
+                  [disabled]="!step2Valid() || savingOptions()"
+                  (click)="saveSelectedOptions()">
+            @if (savingOptions()) {
+              <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+              Next
+            }
+          </button>
+        </div>
+      </div>
+    </mat-step>
+
+    <!-- Step 3: Configure -->
+    <mat-step [completed]="step3Completed()" [editable]="false">
+      <ng-template matStepLabel>Configure</ng-template>
+
+      <div class="step-content">
+        @if (tournament(); as t) {
+          <h3>{{ modeLabel(t.mode) }} Configuration</h3>
+
+          @switch (t.mode) {
+            @case ('bracket') {
+              <div class="config-form">
+                <mat-slide-toggle [checked]="shuffleSeed()"
+                                  (change)="shuffleSeed.set($event.checked)">
+                  Shuffle seed order
+                </mat-slide-toggle>
+                <p class="config-hint">Randomize matchup seeding instead of using insertion order.</p>
+
+                <mat-slide-toggle [checked]="thirdPlaceMatch()"
+                                  (change)="thirdPlaceMatch.set($event.checked)">
+                  Third place match
+                </mat-slide-toggle>
+                <p class="config-hint">Add a consolation match between the two semifinal losers.</p>
+              </div>
+            }
+
+            @case ('score') {
+              <div class="config-form">
+                <div class="config-row">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Min Score</mat-label>
+                    <input matInput
+                           type="number"
+                           [value]="minScore()"
+                           (input)="minScore.set(+$any($event.target).value)">
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Max Score</mat-label>
+                    <input matInput
+                           type="number"
+                           [value]="maxScore()"
+                           (input)="maxScore.set(+$any($event.target).value)">
+                  </mat-form-field>
+                </div>
+
+                @if (minScore() >= maxScore()) {
+                  <p class="validation-hint">Min score must be less than max score.</p>
+                }
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Number of Voters</mat-label>
+                  <input matInput
+                         type="number"
+                         min="1"
+                         [value]="scoreVoterCount()"
+                         (input)="scoreVoterCount.set(+$any($event.target).value)">
+                  <mat-hint>How many voters will participate.</mat-hint>
+                </mat-form-field>
+              </div>
+            }
+
+            @case ('multivote') {
+              <div class="config-form">
+                <mat-form-field appearance="outline">
+                  <mat-label>Total Votes</mat-label>
+                  <input matInput
+                         type="number"
+                         min="1"
+                         [value]="totalVotes() ?? ''"
+                         (input)="totalVotes.set($any($event.target).value ? +$any($event.target).value : null)">
+                  <mat-hint>Leave empty for automatic allocation.</mat-hint>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Max Votes Per Option</mat-label>
+                  <input matInput
+                         type="number"
+                         min="1"
+                         [value]="maxPerOption() ?? ''"
+                         (input)="maxPerOption.set($any($event.target).value ? +$any($event.target).value : null)">
+                  <mat-hint>Leave empty for unlimited.</mat-hint>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Number of Voters</mat-label>
+                  <input matInput
+                         type="number"
+                         min="1"
+                         [value]="multivoteVoterCount()"
+                         (input)="multivoteVoterCount.set(+$any($event.target).value)">
+                  <mat-hint>How many voters will participate.</mat-hint>
+                </mat-form-field>
+              </div>
+            }
+
+            @case ('condorcet') {
+              <div class="config-form">
+                <mat-form-field appearance="outline">
+                  <mat-label>Number of Voters</mat-label>
+                  <input matInput
+                         type="number"
+                         min="1"
+                         [value]="condorcetVoterCount()"
+                         (input)="condorcetVoterCount.set(+$any($event.target).value)">
+                  <mat-hint>How many voters will participate.</mat-hint>
+                </mat-form-field>
+              </div>
+            }
+          }
+        }
+
+        <div class="step-actions">
+          <button mat-button (click)="stepper.previous()">Back</button>
+          <button mat-flat-button
+                  color="primary"
+                  [disabled]="savingConfig()"
+                  (click)="saveConfig()">
+            @if (savingConfig()) {
+              <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+              Next
+            }
+          </button>
+        </div>
+      </div>
+    </mat-step>
+
+    <!-- Step 4: Review + Activate -->
+    <mat-step>
+      <ng-template matStepLabel>Review &amp; Activate</ng-template>
+
+      <div class="step-content">
+        <h3>Tournament Summary</h3>
+
+        <div class="summary-card">
+          @for (entry of configSummary(); track entry.label) {
+            <div class="summary-row">
+              <span class="summary-label">{{ entry.label }}</span>
+              <span class="summary-value">{{ entry.value }}</span>
+            </div>
+          }
+        </div>
+
+        @if (selectedOptions().length > 0) {
+          <h4>Selected Options</h4>
+          <div class="summary-options">
+            @for (opt of selectedOptions(); track opt.id) {
+              <mat-chip>{{ opt.name }}</mat-chip>
+            }
+          </div>
+        }
+
+        <div class="step-actions">
+          <button mat-button (click)="stepper.previous()">Back</button>
+          <button mat-flat-button
+                  color="primary"
+                  [disabled]="activating()"
+                  (click)="activateTournament()">
+            @if (activating()) {
+              <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+              Activate Tournament
+            }
+          </button>
+        </div>
+      </div>
+    </mat-step>
+  </mat-stepper>
+</div>

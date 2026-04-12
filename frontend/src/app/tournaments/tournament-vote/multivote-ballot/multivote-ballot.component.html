@@ -1,0 +1,35 @@
+<div class="ballot-header">
+  <h2>Distribute your votes</h2>
+  <p>{{ context().ballots_submitted }} of {{ context().ballots_required }} ballots submitted</p>
+  <div class="budget" [class.valid]="isValid" [class.over]="remainingVotes < 0">
+    {{ usedVotes }} / {{ totalVotes }} votes used
+    @if (remainingVotes > 0) {
+      <span>({{ remainingVotes }} remaining)</span>
+    }
+  </div>
+</div>
+
+<div class="entries">
+  @for (entry of entries; track entry.id) {
+    <mat-card class="entry-row">
+      <div class="entry-info">
+        <strong>{{ entry.name }}</strong>
+        <div class="vote-controls">
+          <button mat-icon-button (click)="decrement(entry.id)" [disabled]="!allocations[entry.id]">
+            <mat-icon>remove</mat-icon>
+          </button>
+          <span class="vote-count">{{ allocations[entry.id] || 0 }}</span>
+          <button mat-icon-button (click)="increment(entry.id)" [disabled]="remainingVotes <= 0">
+            <mat-icon>add</mat-icon>
+          </button>
+        </div>
+      </div>
+    </mat-card>
+  }
+</div>
+
+<div class="submit">
+  <button mat-raised-button color="primary" [disabled]="!isValid" (click)="submit()">
+    Submit Votes
+  </button>
+</div>

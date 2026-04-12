@@ -1,0 +1,31 @@
+<div class="options-header">
+  <h1>Options</h1>
+  <button mat-flat-button color="primary" (click)="openCreateDialog()">
+    <mat-icon>add</mat-icon>
+    Add Option
+  </button>
+</div>
+
+<app-option-search (searchChange)="onSearchChange($event)" />
+
+@if (loading()) {
+  <div class="loading-container">
+    <mat-spinner diameter="48" />
+  </div>
+} @else {
+  @if (options().length === 0) {
+    <div class="empty-state">
+      <mat-icon class="empty-icon">inventory_2</mat-icon>
+      <p>No options found. Create one to get started.</p>
+    </div>
+  } @else {
+    <div class="options-list">
+      @for (option of options(); track option.id) {
+        <app-option-card
+          [option]="option"
+          (edit)="openEditDialog($event)"
+          (delete)="confirmDelete($event)" />
+      }
+    </div>
+  }
+}

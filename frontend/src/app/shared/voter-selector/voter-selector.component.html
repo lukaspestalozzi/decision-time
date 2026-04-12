@@ -1,0 +1,8 @@
+<mat-form-field appearance="outline">
+  <mat-label>Select voter</mat-label>
+  <mat-select [value]="currentVoter()" (selectionChange)="onSelect($event.value)">
+    @for (voter of voters; track voter) {
+      <mat-option [value]="voter">{{ voter }}</mat-option>
+    }
+  </mat-select>
+</mat-form-field>

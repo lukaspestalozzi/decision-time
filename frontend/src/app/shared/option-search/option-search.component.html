@@ -1,0 +1,45 @@
+<div class="search-bar">
+  <mat-form-field appearance="outline" class="search-input">
+    <mat-label>Search options</mat-label>
+    <input matInput
+           [ngModel]="query()"
+           (ngModelChange)="onQueryChange($event)"
+           placeholder="Search by name or description">
+    <mat-icon matPrefix>search</mat-icon>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="tag-input">
+    <mat-label>Filter by tags ({{ tagMode() === 'all' ? 'match all' : 'match any' }})</mat-label>
+    <mat-chip-grid #chipGrid>
+      @for (tag of selectedTagsAll(); track tag) {
+        <mat-chip-row (removed)="removeTagAll(tag)" color="primary" highlighted>
+          {{ tag }}
+          <button matChipRemove>
+            <mat-icon>cancel</mat-icon>
+          </button>
+        </mat-chip-row>
+      }
+      @for (tag of selectedTagsAny(); track tag) {
+        <mat-chip-row (removed)="removeTagAny(tag)">
+          {{ tag }}
+          <button matChipRemove>
+            <mat-icon>cancel</mat-icon>
+          </button>
+        </mat-chip-row>
+      }
+      <input [matChipInputFor]="chipGrid"
+             [matAutocomplete]="auto"
+             [ngModel]="tagInput()"
+             (ngModelChange)="onTagInputChange($event)"
+             placeholder="Add tag...">
+    </mat-chip-grid>
+    <mat-autocomplete #auto="matAutocomplete" (optionSelected)="addTag($event.option.value)">
+      @for (tag of filteredTags(); track tag) {
+        <mat-option [value]="tag">{{ tag }}</mat-option>
+      }
+    </mat-autocomplete>
+    <button mat-icon-button matSuffix (click)="toggleMode()" [attr.aria-label]="'Switch to ' + (tagMode() === 'all' ? 'any' : 'all') + ' mode'">
+      <mat-icon>{{ tagMode() === 'all' ? 'filter_list' : 'filter_list_off' }}</mat-icon>
+    </button>
+  </mat-form-field>
+</div>

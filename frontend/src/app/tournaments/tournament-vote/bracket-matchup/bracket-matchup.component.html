@@ -1,0 +1,30 @@
+<div class="matchup-header">
+  <h2>{{ context().round_name }}</h2>
+  <p>Match {{ context().match_number }} of {{ context().matches_in_round }}</p>
+</div>
+
+<div class="matchup-cards">
+  <mat-card
+    [class.selected]="selected() === (context().entry_a['id'])"
+    (click)="select(context().entry_a['id'] + '')"
+    class="entry-card"
+  >
+    <mat-card-header><mat-card-title>{{ getEntryName(context().entry_a) }}</mat-card-title></mat-card-header>
+  </mat-card>
+
+  <span class="vs">VS</span>
+
+  <mat-card
+    [class.selected]="selected() === (context().entry_b['id'])"
+    (click)="select(context().entry_b['id'] + '')"
+    class="entry-card"
+  >
+    <mat-card-header><mat-card-title>{{ getEntryName(context().entry_b) }}</mat-card-title></mat-card-header>
+  </mat-card>
+</div>
+
+<div class="confirm">
+  <button mat-raised-button color="primary" [disabled]="!selected()" (click)="confirm()">
+    Confirm Choice
+  </button>
+</div>

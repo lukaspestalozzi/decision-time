@@ -1,0 +1,31 @@
+.matrix-container {
+  overflow-x: auto;
+}
+
+.matrix {
+  border-collapse: collapse;
+  width: 100%;
+
+  th, td {
+    border: 1px solid #e0e0e0;
+    padding: 8px 12px;
+    text-align: center;
+    min-width: 60px;
+  }
+
+  th {
+    background: #f5f5f5;
+    font-weight: 500;
+  }
+
+  .row-header {
+    text-align: left;
+    font-weight: 500;
+    background: #f5f5f5;
+  }
+
+  .diagonal { background: #eeeeee; color: #999; }
+  .win { background: #e8f5e9; font-weight: bold; }
+  .loss { background: #fbe9e7; }
+  .tie { background: #fff3e0; }
+}

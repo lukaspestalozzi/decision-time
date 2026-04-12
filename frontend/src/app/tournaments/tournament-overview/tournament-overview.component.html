@@ -1,0 +1,59 @@
+@if (tournament(); as t) {
+  <div class="overview">
+    <div class="header">
+      <h1>{{ t.name }}</h1>
+      <mat-chip-set>
+        <mat-chip [class]="'status-' + t.status">{{ t.status }}</mat-chip>
+        <mat-chip>{{ t.mode }}</mat-chip>
+      </mat-chip-set>
+    </div>
+
+    @if (t.description) {
+      <p class="description">{{ t.description }}</p>
+    }
+
+    <mat-divider></mat-divider>
+
+    <div class="details">
+      <p><strong>Mode:</strong> {{ t.mode }}</p>
+      <p><strong>Options:</strong> {{ t.selected_option_ids.length }}</p>
+      @if (t.entries.length > 0) {
+        <p><strong>Entries:</strong> {{ t.entries.length }}</p>
+      }
+      @if (t.votes.length > 0) {
+        <p><strong>Votes cast:</strong> {{ t.votes.length }}</p>
+      }
+      @if (t.result) {
+        <p><strong>Winner:</strong>
+          @for (wid of t.result.winner_ids; track wid) {
+            {{ getEntryName(wid) }}
+          }
+        </p>
+      }
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <div class="actions">
+      @switch (t.status) {
+        @case ('draft') {
+          <a mat-raised-button color="primary" [routerLink]="['/tournaments/new']" [queryParams]="{edit: t.id}">Edit</a>
+          <button mat-raised-button color="warn" (click)="onCancel()">Cancel</button>
+          <button mat-button color="warn" (click)="onDelete()">Delete</button>
+        }
+        @case ('active') {
+          <a mat-raised-button color="primary" [routerLink]="['/tournaments', t.id, 'vote']">Vote</a>
+          <button mat-raised-button color="warn" (click)="onCancel()">Cancel</button>
+        }
+        @case ('completed') {
+          <a mat-raised-button color="primary" [routerLink]="['/tournaments', t.id, 'result']">View Result</a>
+          <button mat-raised-button (click)="onClone()">Clone</button>
+        }
+        @case ('cancelled') {
+          <button mat-raised-button (click)="onClone()">Clone</button>
+          <button mat-button color="warn" (click)="onDelete()">Delete</button>
+        }
+      }
+    </div>
+  </div>
+}

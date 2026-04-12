@@ -1,0 +1,20 @@
+<div class="bracket">
+  @for (round of rounds; track round.round_number) {
+    <div class="round">
+      <div class="round-header">{{ round.name }}</div>
+      @for (matchup of round.matchups; track $index) {
+        @if (!matchup.is_bye) {
+          <mat-card class="matchup">
+            <div class="entry" [class.winner]="isWinner(matchup, matchup.entry_a_id)">
+              {{ getEntryName(matchup.entry_a_id) }}
+            </div>
+            <div class="vs">vs</div>
+            <div class="entry" [class.winner]="isWinner(matchup, matchup.entry_b_id)">
+              {{ getEntryName(matchup.entry_b_id) }}
+            </div>
+          </mat-card>
+        }
+      }
+    </div>
+  }
+</div>

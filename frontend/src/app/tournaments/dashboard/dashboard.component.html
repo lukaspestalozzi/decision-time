@@ -1,0 +1,121 @@
+@if (loading()) {
+  <div class="loading-container">
+    <mat-spinner diameter="48"></mat-spinner>
+  </div>
+}
+
+@if (error(); as errorMsg) {
+  <div class="error-container">
+    <mat-icon>error_outline</mat-icon>
+    <p>{{ errorMsg }}</p>
+    <button mat-flat-button color="primary" (click)="loadTournaments()">
+      <mat-icon>refresh</mat-icon>
+      Retry
+    </button>
+  </div>
+}
+
+@if (!loading() && !error()) {
+  @if (isEmpty()) {
+    <div class="empty-state">
+      <mat-icon class="empty-icon">emoji_events</mat-icon>
+      <h2>No tournaments yet</h2>
+      <p>Get started by creating your first tournament to make a decision.</p>
+      <a mat-flat-button color="primary" routerLink="/tournaments/new">
+        <mat-icon>add</mat-icon>
+        Create your first tournament
+      </a>
+    </div>
+  } @else {
+    <!-- Active & Draft Tournaments -->
+    @if (activeTournaments().length > 0) {
+      <section class="section">
+        <h2 class="section-title">Active Tournaments</h2>
+        <div class="card-grid">
+          @for (t of activeTournaments(); track t.id) {
+            <mat-card class="tournament-card">
+              <mat-card-header>
+                <mat-icon mat-card-avatar class="mode-avatar">{{ modeIcon(t.mode) }}</mat-icon>
+                <mat-card-title>{{ t.name }}</mat-card-title>
+                <mat-card-subtitle>
+                  {{ t.entries.length > 0 ? t.entries.length + ' entries' : t.selected_option_ids.length + ' options selected' }}
+                </mat-card-subtitle>
+              </mat-card-header>
+
+              <mat-card-content>
+                <div class="badge-row">
+                  <mat-chip-set>
+                    <mat-chip [highlighted]="true" class="mode-chip">
+                      {{ modeLabel(t.mode) }}
+                    </mat-chip>
+                    <mat-chip
+                      [highlighted]="t.status === 'active'"
+                      [class]="'status-chip status-' + t.status"
+                    >
+                      {{ t.status === 'draft' ? 'Draft' : 'Active' }}
+                    </mat-chip>
+                  </mat-chip-set>
+                </div>
+                @if (t.description) {
+                  <p class="description">{{ t.description }}</p>
+                }
+              </mat-card-content>
+
+              <mat-card-actions align="end">
+                @if (t.status === 'active') {
+                  <a mat-button routerLink="/tournaments/{{ t.id }}/vote">
+                    <mat-icon>how_to_vote</mat-icon>
+                    Vote
+                  </a>
+                }
+                <a mat-button routerLink="/tournaments/{{ t.id }}">
+                  <mat-icon>visibility</mat-icon>
+                  View
+                </a>
+              </mat-card-actions>
+            </mat-card>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Completed Tournaments -->
+    @if (completedTournaments().length > 0) {
+      <section class="section">
+        <h2 class="section-title">Recent Results</h2>
+        <div class="card-grid">
+          @for (t of completedTournaments(); track t.id) {
+            <mat-card class="tournament-card completed-card">
+              <mat-card-header>
+                <mat-icon mat-card-avatar class="mode-avatar">{{ modeIcon(t.mode) }}</mat-icon>
+                <mat-card-title>{{ t.name }}</mat-card-title>
+                <mat-card-subtitle>{{ modeLabel(t.mode) }}</mat-card-subtitle>
+              </mat-card-header>
+
+              <mat-card-content>
+                @if (t.description) {
+                  <p class="description">{{ t.description }}</p>
+                }
+              </mat-card-content>
+
+              <mat-card-actions align="end">
+                <a mat-button routerLink="/tournaments/{{ t.id }}/result">
+                  <mat-icon>leaderboard</mat-icon>
+                  View Result
+                </a>
+              </mat-card-actions>
+            </mat-card>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Quick create -->
+    <div class="create-cta">
+      <a mat-flat-button color="primary" routerLink="/tournaments/new">
+        <mat-icon>add</mat-icon>
+        New Tournament
+      </a>
+    </div>
+  }
+}

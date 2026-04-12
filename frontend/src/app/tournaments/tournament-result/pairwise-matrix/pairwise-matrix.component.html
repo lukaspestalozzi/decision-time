@@ -1,0 +1,30 @@
+@if (matrix.length > 0) {
+  <div class="matrix-container">
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th></th>
+          @for (name of entryNames; track $index) {
+            <th>{{ name }}</th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (name of entryNames; track $index; let rowIdx = $index) {
+          <tr>
+            <td class="row-header">{{ name }}</td>
+            @for (_ of entryNames; track $index; let colIdx = $index) {
+              <td [class]="getCellClass(rowIdx, colIdx)">
+                @if (rowIdx !== colIdx) {
+                  {{ matrix[rowIdx][colIdx] }}
+                } @else {
+                  -
+                }
+              </td>
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

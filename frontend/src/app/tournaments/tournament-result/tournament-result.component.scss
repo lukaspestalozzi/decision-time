@@ -1,0 +1,35 @@
+.result-page {
+  max-width: 800px;
+}
+
+.winner-card {
+  margin-bottom: 24px;
+}
+
+.trophy {
+  font-size: 40px;
+  width: 40px;
+  height: 40px;
+  color: #f9a825;
+}
+
+.winner-names {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 0;
+}
+
+.winner-name {
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.ranking-table {
+  width: 100%;
+  margin-bottom: 32px;
+}
+
+h2 {
+  margin-top: 32px;
+}

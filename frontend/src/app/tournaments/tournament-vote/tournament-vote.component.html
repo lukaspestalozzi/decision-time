@@ -1,0 +1,35 @@
+<div class="vote-page">
+  @if (!isBracket && voterCount > 1) {
+    <app-voter-selector
+      [voterCount]="voterCount"
+      [currentVoter]="currentVoter()"
+      (voterChange)="onVoterChange($event)"
+    />
+  }
+
+  @if (loading()) {
+    <div class="loading"><mat-spinner diameter="40" /></div>
+  } @else if (voteContext()) {
+    @switch (voteContext()!.type) {
+      @case ('bracket_matchup') {
+        <app-bracket-matchup [context]="$any(voteContext())" [tournament]="tournament()!" (vote)="onVote($event)" />
+      }
+      @case ('condorcet_matchup') {
+        <app-condorcet-matchup [context]="$any(voteContext())" [tournament]="tournament()!" (vote)="onVote($event)" />
+      }
+      @case ('ballot') {
+        @if ($any(voteContext()).ballot_type === 'score') {
+          <app-score-ballot [context]="$any(voteContext())" [tournament]="tournament()!" (vote)="onVote($event)" />
+        } @else {
+          <app-multivote-ballot [context]="$any(voteContext())" [tournament]="tournament()!" (vote)="onVote($event)" />
+        }
+      }
+      @case ('already_voted') {
+        <app-already-voted />
+      }
+      @case ('completed') {
+        <app-tournament-result [tournament]="tournament()!" />
+      }
+    }
+  }
+</div>

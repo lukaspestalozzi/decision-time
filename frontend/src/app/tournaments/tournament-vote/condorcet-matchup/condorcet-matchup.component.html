@@ -1,0 +1,31 @@
+<div class="matchup-header">
+  <h2>Pairwise Comparison</h2>
+  <p>Matchup {{ context().matchup_number }} of {{ context().total_matchups }}</p>
+  <mat-progress-bar mode="determinate" [value]="progress"></mat-progress-bar>
+</div>
+
+<div class="matchup-cards">
+  <mat-card
+    [class.selected]="selected() === (context().entry_a['id'])"
+    (click)="select(context().entry_a['id'] + '')"
+    class="entry-card"
+  >
+    <mat-card-header><mat-card-title>{{ getEntryName(context().entry_a) }}</mat-card-title></mat-card-header>
+  </mat-card>
+
+  <span class="vs">VS</span>
+
+  <mat-card
+    [class.selected]="selected() === (context().entry_b['id'])"
+    (click)="select(context().entry_b['id'] + '')"
+    class="entry-card"
+  >
+    <mat-card-header><mat-card-title>{{ getEntryName(context().entry_b) }}</mat-card-title></mat-card-header>
+  </mat-card>
+</div>
+
+<div class="confirm">
+  <button mat-raised-button color="primary" [disabled]="!selected()" (click)="confirm()">
+    Confirm Choice
+  </button>
+</div>

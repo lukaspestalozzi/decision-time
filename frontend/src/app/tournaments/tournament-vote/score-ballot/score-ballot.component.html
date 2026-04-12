@@ -1,0 +1,24 @@
+<div class="ballot-header">
+  <h2>Rate each option</h2>
+  <p>{{ context().ballots_submitted }} of {{ context().ballots_required }} ballots submitted</p>
+</div>
+
+<div class="entries">
+  @for (entry of entries; track entry.id) {
+    <mat-card class="entry-row">
+      <div class="entry-info">
+        <strong>{{ entry.name }}</strong>
+        <span class="score-display">{{ scores[entry.id] ?? '-' }}</span>
+      </div>
+      <mat-slider [min]="minScore" [max]="maxScore" step="1" discrete showTickMarks>
+        <input matSliderThumb [(ngModel)]="scores[entry.id]" />
+      </mat-slider>
+    </mat-card>
+  }
+</div>
+
+<div class="submit">
+  <button mat-raised-button color="primary" [disabled]="!allScored" (click)="submit()">
+    Submit Scores
+  </button>
+</div>
