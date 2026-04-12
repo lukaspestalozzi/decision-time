@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8009:8009"
+    volumes:
+      - decision_time_data:/data
+    environment:
+      - DATA_DIR=/data
+      - PORT=8009
+      - LOG_LEVEL=info
+
+volumes:
+  decision_time_data:
