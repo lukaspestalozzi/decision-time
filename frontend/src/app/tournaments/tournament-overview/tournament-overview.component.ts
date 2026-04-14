@@ -1,4 +1,5 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -20,12 +21,15 @@ export class TournamentOverviewComponent implements OnInit {
   private router = inject(Router);
   private api = inject(ApiService);
   private notify = inject(NotificationService);
+  private destroyRef = inject(DestroyRef);
 
   tournament = signal<Tournament | null>(null);
 
   ngOnInit(): void {
-    const id = this.route.snapshot.paramMap.get('id')!;
-    this.loadTournament(id);
+    this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
+      const id = params.get('id')!;
+      this.loadTournament(id);
+    });
   }
 
   private loadTournament(id: string): void {

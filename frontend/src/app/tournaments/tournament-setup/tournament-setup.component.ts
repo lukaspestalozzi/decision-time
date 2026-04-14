@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal, ViewChild } from '@angular/core';
+import { afterNextRender, Component, computed, inject, Injector, signal, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { STEPPER_GLOBAL_OPTIONS } from '@angular/cdk/stepper';
@@ -47,6 +47,7 @@ export class TournamentSetupComponent {
   private api = inject(ApiService);
   private router = inject(Router);
   private notify = inject(NotificationService);
+  private injector = inject(Injector);
 
   @ViewChild('stepper') stepper!: MatStepper;
 
@@ -68,7 +69,7 @@ export class TournamentSetupComponent {
   selectedTag = signal<string | null>(null);
   loadingOptions = signal(false);
   savingOptions = signal(false);
-  step2Completed = signal(false);
+  step2Completed = computed(() => (this.tournament()?.selected_option_ids?.length ?? 0) >= 2);
 
   step2Valid = computed(() => this.selectedOptionIds().size >= 2);
 
@@ -91,7 +92,7 @@ export class TournamentSetupComponent {
 
   // --- Step 3: Configure ---
   savingConfig = signal(false);
-  step3Completed = signal(false);
+  step3Completed = computed(() => Object.keys(this.tournament()?.config ?? {}).length > 0);
 
   // Bracket config
   shuffleSeed = signal(true);
@@ -140,6 +141,13 @@ export class TournamentSetupComponent {
       description: 'Every option compared head-to-head. Schulze method finds the strongest winner.',
     },
   ];
+
+  // --- Stepper ---
+
+  /** Advance stepper after the next render so [completed] bindings are applied. */
+  private advanceStepper(): void {
+    afterNextRender(() => this.stepper.next(), { injector: this.injector });
+  }
 
   // --- Helpers ---
 
@@ -211,8 +219,7 @@ export class TournamentSetupComponent {
         this.creatingTournament.set(false);
         this.notify.showSuccess('Tournament draft created.');
         this.loadOptions();
-        // Advance stepper after the step's [completed] binding becomes true
-        setTimeout(() => this.stepper.next());
+        this.advanceStepper();
       },
       error: (err) => {
         this.creatingTournament.set(false);
@@ -283,9 +290,8 @@ export class TournamentSetupComponent {
       next: (updated) => {
         this.tournament.set(updated);
         this.savingOptions.set(false);
-        this.step2Completed.set(true);
         this.notify.showSuccess('Options saved.');
-        setTimeout(() => this.stepper.next());
+        this.advanceStepper();
       },
       error: (err) => {
         this.savingOptions.set(false);
@@ -340,9 +346,8 @@ export class TournamentSetupComponent {
       next: (updated) => {
         this.tournament.set(updated);
         this.savingConfig.set(false);
-        this.step3Completed.set(true);
         this.notify.showSuccess('Configuration saved.');
-        setTimeout(() => this.stepper.next());
+        this.advanceStepper();
       },
       error: (err) => {
         this.savingConfig.set(false);
