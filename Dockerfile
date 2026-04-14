@@ -14,8 +14,8 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install backend dependencies
-COPY backend/pyproject.toml ./
-RUN uv sync --frozen --no-dev || uv sync --no-dev
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --frozen --no-dev
 
 # Copy backend code
 COPY backend/app ./app
