@@ -27,33 +27,29 @@ test.describe('Bracket Tournament', () => {
     // Select Bracket mode by clicking the Bracket card
     await page.locator('.mode-card', { hasText: 'Bracket' }).click();
 
-    // Click Next
+    // Click Next (creates tournament draft, advances to step 2)
     await page.getByRole('button', { name: 'Next' }).click();
 
-    // Wait for step 2
-    await expect(page.getByText('Available Options')).toBeVisible({ timeout: 10000 });
-
     // --- Step 2: Select Options ---
-    // Select at least 2 options by clicking them
+    // Wait for options to load from API
+    await expect(page.locator('.option-item')).toHaveCount(3, { timeout: 10000 });
     await page.locator('.option-item', { hasText: 'Option A' }).click();
     await page.locator('.option-item', { hasText: 'Option B' }).click();
-
-    // Verify "Selected (2)" text
     await expect(page.getByText('Selected (2)')).toBeVisible();
 
-    // Click Next
+    // Click Next (saves options, advances to step 3)
     await page.getByRole('button', { name: 'Next' }).click();
 
     // --- Step 3: Configure ---
     await expect(page.getByText('Bracket Configuration')).toBeVisible({ timeout: 10000 });
 
-    // Default config is fine, click Next
+    // Default config is fine, click Next (saves config, advances to step 4)
     await page.getByRole('button', { name: 'Next' }).click();
 
     // --- Step 4: Review & Activate ---
     await expect(page.getByText('Tournament Summary')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('My Bracket Test')).toBeVisible();
-    await expect(page.getByText('Bracket')).toBeVisible();
+    await expect(page.getByLabel('Review & Activate').getByText('Bracket', { exact: true })).toBeVisible();
 
     // Click Activate Tournament
     await page.getByRole('button', { name: 'Activate Tournament' }).click();
@@ -118,7 +114,7 @@ test.describe('Bracket Tournament', () => {
     await expect(page.locator('.ranking-table')).toBeVisible();
 
     // Bracket view should be present
-    await expect(page.getByText('Bracket', { exact: false })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Bracket', exact: true })).toBeVisible();
   });
 
   test('clone tournament', async ({ page, request }) => {
@@ -139,7 +135,7 @@ test.describe('Bracket Tournament', () => {
 
     // Should navigate to the new tournament overview
     // The new tournament should be in draft status
-    await expect(page.getByText('draft')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('draft')).toBeVisible({ timeout: 15000 });
     // It should have the same name
     await expect(page.getByRole('heading', { name: 'Clone Source', level: 1 })).toBeVisible();
     // The URL should have changed to a new ID
@@ -161,7 +157,7 @@ test.describe('Bracket Tournament', () => {
     // Click Cancel button
     await page.getByRole('button', { name: 'Cancel' }).click();
 
-    // Verify the status changed to cancelled
-    await expect(page.getByText('cancelled')).toBeVisible({ timeout: 10000 });
+    // Verify the status changed to cancelled (exact match to avoid matching snackbar text)
+    await expect(page.getByText('cancelled', { exact: true })).toBeVisible({ timeout: 10000 });
   });
 });

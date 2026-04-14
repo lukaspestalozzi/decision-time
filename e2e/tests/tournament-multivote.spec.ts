@@ -101,7 +101,7 @@ test.describe('Multivote Tournament', () => {
     // Ranking table should show vote counts
     const rankingTable = page.locator('.ranking-table');
     await expect(rankingTable).toBeVisible();
-    await expect(rankingTable.getByText(/Votes:/)).toBeVisible();
+    await expect(rankingTable.getByText(/Votes:/).first()).toBeVisible();
   });
 
   test('multivote budget validation', async ({ page, request }) => {

@@ -33,15 +33,10 @@ test.describe('Score Tournament', () => {
     const sliderInputs = page.locator('input[matSliderThumb]');
     await expect(sliderInputs).toHaveCount(3);
 
-    // Set values for each slider by focusing and using keyboard
-    for (let i = 0; i < 3; i++) {
-      const slider = sliderInputs.nth(i);
-      await slider.focus();
-      // Reset to minimum by pressing Home
-      await slider.press('Home');
-      // Press right arrow to increase: scores will be 2, 2, 2 (min=1, one press = +1 step)
-      await slider.press('ArrowRight');
-    }
+    // Set different values for each slider to ensure a clear winner
+    await sliderInputs.nth(0).fill('5');
+    await sliderInputs.nth(1).fill('3');
+    await sliderInputs.nth(2).fill('1');
 
     // The Submit button should now be enabled (all entries scored)
     const submitButton = page.getByRole('button', { name: 'Submit Scores' });
@@ -90,11 +85,7 @@ test.describe('Score Tournament', () => {
 
     for (let i = 0; i < 3; i++) {
       const slider = sliderInputs.nth(i);
-      await slider.focus();
-      await slider.press('Home');
-      // Press right arrow twice for a score of 3
-      await slider.press('ArrowRight');
-      await slider.press('ArrowRight');
+      await slider.fill('3');
     }
 
     // Submit
@@ -146,6 +137,6 @@ test.describe('Score Tournament', () => {
     await expect(rankingTable.getByText('Score')).toBeVisible();
 
     // Should contain "Avg:" in the table rows
-    await expect(rankingTable.getByText(/Avg:/)).toBeVisible();
+    await expect(rankingTable.getByText(/Avg:/).first()).toBeVisible();
   });
 });

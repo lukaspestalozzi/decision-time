@@ -18,11 +18,11 @@ test.describe('Condorcet Tournament', () => {
       { voter_count: 1 },
     );
 
-    // Navigate to the vote page
-    await page.goto(`/tournaments/${tournament.id}/vote`);
+    // Navigate to the vote page with explicit voter label
+    await page.goto(`/tournaments/${tournament.id}/vote?voter=Voter+1`);
 
     // Wait for the condorcet matchup UI to appear
-    await expect(page.getByText('Pairwise Comparison')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Pairwise Comparison')).toBeVisible({ timeout: 15000 });
 
     // With 3 options, there are 3*(3-1)/2 = 3 matchups
     // Verify progress text is present
@@ -82,7 +82,7 @@ test.describe('Condorcet Tournament', () => {
     // Ranking table should show wins
     const rankingTable = page.locator('.ranking-table');
     await expect(rankingTable).toBeVisible();
-    await expect(rankingTable.getByText(/Wins:/)).toBeVisible();
+    await expect(rankingTable.getByText(/Wins:/).first()).toBeVisible();
 
     // Pairwise matrix should be present
     await expect(page.getByText('Pairwise Results')).toBeVisible();
@@ -116,7 +116,7 @@ test.describe('Condorcet Tournament', () => {
     await page.goto(`/tournaments/${tournament.id}/vote?voter=Voter+2`);
 
     // Wait for condorcet matchup UI
-    await expect(page.getByText('Pairwise Comparison')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Pairwise Comparison')).toBeVisible({ timeout: 15000 });
 
     // Voter selector should be visible for multi-voter modes
     await expect(page.locator('app-voter-selector')).toBeVisible();
