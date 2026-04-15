@@ -12,7 +12,7 @@ from app.engines.score import ScoreEngine
 from app.exceptions import InvalidStateError, ValidationError
 from app.repositories.options import OptionRepository
 from app.repositories.tournaments import TournamentRepository
-from app.schemas.common import TournamentMode, TournamentStatus, get_default_config
+from app.schemas.common import TournamentMode, TournamentStatus, get_default_config, normalize_config
 from app.schemas.tournament import Result, Tournament, TournamentEntry, Vote
 
 
@@ -69,7 +69,10 @@ class TournamentService:
         if selected_option_ids is not None:
             tournament.selected_option_ids = selected_option_ids
         if config is not None:
-            tournament.config = config
+            try:
+                tournament.config = normalize_config(tournament.mode, config)
+            except Exception as e:
+                raise ValidationError(str(e)) from e
         return self._repo.save(tournament, expected_version=version)
 
     def delete_tournament(self, tournament_id: UUID) -> None:

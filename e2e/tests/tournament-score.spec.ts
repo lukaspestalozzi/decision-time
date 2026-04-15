@@ -15,7 +15,7 @@ test.describe('Score Tournament', () => {
     // Setup a score tournament with 1 voter and 3 options via API
     const { tournament } = await setupActiveScoreTournament(
       request, 'Score Vote Test', ['Pizza', 'Pasta', 'Risotto'],
-      { min_score: 1, max_score: 5, voter_count: 1 },
+      { min_score: 1, max_score: 5, voter_labels: ['default'] },
     );
 
     // Navigate to the vote page
@@ -45,17 +45,17 @@ test.describe('Score Tournament', () => {
     // Click Submit
     await submitButton.click();
 
-    // After submission with voter_count=1, tournament completes
+    // After submission with single voter, tournament completes
     // Should show the result inline
     await expect(page.getByText('Winner')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Full Ranking')).toBeVisible();
   });
 
   test('multi-voter score flow', async ({ page, request }) => {
-    // Setup score tournament with voter_count=2
+    // Setup score tournament with 2 voters
     const { tournament } = await setupActiveScoreTournament(
       request, 'Multi-Voter Score', ['Java', 'Python', 'Rust'],
-      { min_score: 1, max_score: 5, voter_count: 2 },
+      { min_score: 1, max_score: 5, voter_labels: ['Voter 1', 'Voter 2'] },
     );
 
     // Get vote context for Voter 1 to get the entry IDs
@@ -102,11 +102,11 @@ test.describe('Score Tournament', () => {
     // Setup and complete a score tournament via API
     const { tournament } = await setupActiveScoreTournament(
       request, 'Score Results', ['Espresso', 'Latte', 'Cappuccino'],
-      { min_score: 1, max_score: 10, voter_count: 1 },
+      { min_score: 1, max_score: 10, voter_labels: ['default'] },
     );
 
     // Get vote context to learn entry IDs
-    const ctx = await getVoteContext(request, tournament.id, 'Voter 1');
+    const ctx = await getVoteContext(request, tournament.id, 'default');
     const entryIds = ctx.entries.map((e: any) => e.id);
 
     // Submit vote via API
@@ -115,7 +115,7 @@ test.describe('Score Tournament', () => {
       score: 10 - (i * 3), // scores: 10, 7, 4
     }));
     await submitVote(
-      request, tournament.id, tournament.version, 'Voter 1',
+      request, tournament.id, tournament.version, 'default',
       { scores },
     );
 
@@ -138,5 +138,39 @@ test.describe('Score Tournament', () => {
 
     // Should contain "Avg:" in the table rows
     await expect(rankingTable.getByText(/Avg:/).first()).toBeVisible();
+  });
+
+  test('custom voter labels', async ({ page, request }) => {
+    // Setup score tournament with custom-named voters
+    const { tournament } = await setupActiveScoreTournament(
+      request, 'Custom Voter Names', ['Coffee', 'Tea', 'Juice'],
+      { min_score: 1, max_score: 5, voter_labels: ['Alice', 'Bob'] },
+    );
+
+    // Alice submits via API
+    const ctx = await getVoteContext(request, tournament.id, 'Alice');
+    const entryIds = ctx.entries.map((e: any) => e.id);
+    await submitVote(
+      request, tournament.id, tournament.version, 'Alice',
+      { scores: entryIds.map((id: string, i: number) => ({ entry_id: id, score: 5 - i })) },
+    );
+
+    // Navigate the UI as Bob — voter selector must show Alice and Bob (not "Voter 1"/"Voter 2")
+    await page.goto(`/tournaments/${tournament.id}/vote?voter=Bob`);
+    await expect(page.getByText('Rate each option')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('1 of 2 ballots submitted')).toBeVisible();
+
+    // Voter selector dropdown should be present (multi-voter tournament)
+    await expect(page.locator('app-voter-selector')).toBeVisible();
+
+    // Submit Bob's scores
+    const sliderInputs = page.locator('input[matSliderThumb]');
+    await sliderInputs.nth(0).fill('5');
+    await sliderInputs.nth(1).fill('3');
+    await sliderInputs.nth(2).fill('1');
+    await page.getByRole('button', { name: 'Submit Scores' }).click();
+
+    // Tournament should complete
+    await expect(page.getByText('Winner')).toBeVisible({ timeout: 10000 });
   });
 });

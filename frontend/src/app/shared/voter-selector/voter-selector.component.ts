@@ -9,13 +9,9 @@ import { MatSelectModule } from '@angular/material/select';
   styleUrl: './voter-selector.component.scss',
 })
 export class VoterSelectorComponent {
-  voterCount = input.required<number>();
-  currentVoter = input<string>('Voter 1');
+  voterLabels = input.required<string[]>();
+  currentVoter = input<string>('');
   voterChange = output<string>();
-
-  get voters(): string[] {
-    return Array.from({ length: this.voterCount() }, (_, i) => `Voter ${i + 1}`);
-  }
 
   onSelect(voter: string): void {
     this.voterChange.emit(voter);

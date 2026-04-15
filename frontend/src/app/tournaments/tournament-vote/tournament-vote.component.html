@@ -1,7 +1,7 @@
 <div class="vote-page">
-  @if (!isBracket && voterCount > 1) {
+  @if (!isBracket && voterLabels.length > 1) {
     <app-voter-selector
-      [voterCount]="voterCount"
+      [voterLabels]="voterLabels"
       [currentVoter]="currentVoter()"
       (voterChange)="onVoterChange($event)"
     />

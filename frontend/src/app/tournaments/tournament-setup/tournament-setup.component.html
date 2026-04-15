@@ -216,13 +216,22 @@
                 }
 
                 <mat-form-field appearance="outline">
-                  <mat-label>Number of Voters</mat-label>
-                  <input matInput
-                         type="number"
-                         min="1"
-                         [value]="scoreVoterCount()"
-                         (input)="scoreVoterCount.set(+$any($event.target).value)">
-                  <mat-hint>How many voters will participate.</mat-hint>
+                  <mat-label>Voters</mat-label>
+                  <mat-chip-grid #scoreVoterChipGrid>
+                    @for (label of scoreVoterLabels(); track label) {
+                      <mat-chip-row (removed)="removeVoterLabel('score', label)">
+                        {{ label }}
+                        <button matChipRemove>
+                          <mat-icon>cancel</mat-icon>
+                        </button>
+                      </mat-chip-row>
+                    }
+                    <input [matChipInputFor]="scoreVoterChipGrid"
+                           [matChipInputSeparatorKeyCodes]="voterSeparatorKeyCodes"
+                           (matChipInputTokenEnd)="addVoterLabel('score', $event)"
+                           placeholder="Add voter name...">
+                  </mat-chip-grid>
+                  <mat-hint>{{ scoreVoterLabels().length }} voter(s). Press Enter or comma to add.</mat-hint>
                 </mat-form-field>
               </div>
             }
@@ -250,13 +259,22 @@
                 </mat-form-field>
 
                 <mat-form-field appearance="outline">
-                  <mat-label>Number of Voters</mat-label>
-                  <input matInput
-                         type="number"
-                         min="1"
-                         [value]="multivoteVoterCount()"
-                         (input)="multivoteVoterCount.set(+$any($event.target).value)">
-                  <mat-hint>How many voters will participate.</mat-hint>
+                  <mat-label>Voters</mat-label>
+                  <mat-chip-grid #multivoteVoterChipGrid>
+                    @for (label of multivoteVoterLabels(); track label) {
+                      <mat-chip-row (removed)="removeVoterLabel('multivote', label)">
+                        {{ label }}
+                        <button matChipRemove>
+                          <mat-icon>cancel</mat-icon>
+                        </button>
+                      </mat-chip-row>
+                    }
+                    <input [matChipInputFor]="multivoteVoterChipGrid"
+                           [matChipInputSeparatorKeyCodes]="voterSeparatorKeyCodes"
+                           (matChipInputTokenEnd)="addVoterLabel('multivote', $event)"
+                           placeholder="Add voter name...">
+                  </mat-chip-grid>
+                  <mat-hint>{{ multivoteVoterLabels().length }} voter(s). Press Enter or comma to add.</mat-hint>
                 </mat-form-field>
               </div>
             }
@@ -264,13 +282,22 @@
             @case ('condorcet') {
               <div class="config-form">
                 <mat-form-field appearance="outline">
-                  <mat-label>Number of Voters</mat-label>
-                  <input matInput
-                         type="number"
-                         min="1"
-                         [value]="condorcetVoterCount()"
-                         (input)="condorcetVoterCount.set(+$any($event.target).value)">
-                  <mat-hint>How many voters will participate.</mat-hint>
+                  <mat-label>Voters</mat-label>
+                  <mat-chip-grid #condorcetVoterChipGrid>
+                    @for (label of condorcetVoterLabels(); track label) {
+                      <mat-chip-row (removed)="removeVoterLabel('condorcet', label)">
+                        {{ label }}
+                        <button matChipRemove>
+                          <mat-icon>cancel</mat-icon>
+                        </button>
+                      </mat-chip-row>
+                    }
+                    <input [matChipInputFor]="condorcetVoterChipGrid"
+                           [matChipInputSeparatorKeyCodes]="voterSeparatorKeyCodes"
+                           (matChipInputTokenEnd)="addVoterLabel('condorcet', $event)"
+                           placeholder="Add voter name...">
+                  </mat-chip-grid>
+                  <mat-hint>{{ condorcetVoterLabels().length }} voter(s). Press Enter or comma to add.</mat-hint>
                 </mat-form-field>
               </div>
             }

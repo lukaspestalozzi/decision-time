@@ -38,6 +38,7 @@ export class TournamentVoteComponent implements OnInit {
   voteContext = signal<VoteContext | null>(null);
   currentVoter = signal('default');
   loading = signal(false);
+  private explicitVoterParam = false;
 
   get tournamentId(): string {
     return this.route.snapshot.paramMap.get('id')!;
@@ -47,15 +48,17 @@ export class TournamentVoteComponent implements OnInit {
     return this.tournament()?.mode === 'bracket';
   }
 
-  get voterCount(): number {
+  get voterLabels(): string[] {
     const config = this.tournament()?.config;
-    return (config?.['voter_count'] as number) ?? 1;
+    const labels = config?.['voter_labels'];
+    return Array.isArray(labels) && labels.length > 0 ? (labels as string[]) : ['default'];
   }
 
   ngOnInit(): void {
     const voterParam = this.route.snapshot.queryParamMap.get('voter');
     if (voterParam) {
       this.currentVoter.set(voterParam);
+      this.explicitVoterParam = true;
     }
     this.loadTournament();
   }
@@ -64,6 +67,10 @@ export class TournamentVoteComponent implements OnInit {
     this.api.getTournament(this.tournamentId).subscribe({
       next: (t) => {
         this.tournament.set(t);
+        // If no explicit voter param, default to the first configured voter label
+        if (!this.explicitVoterParam) {
+          this.currentVoter.set(this.voterLabels[0]);
+        }
         this.loadVoteContext();
       },
       error: () => this.notify.showError('Tournament not found'),

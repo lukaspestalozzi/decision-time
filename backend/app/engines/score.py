@@ -24,7 +24,8 @@ class ScoreEngine(TournamentEngine):
     def initialize(self, entries: list[TournamentEntry], config: dict[str, Any]) -> dict[str, Any]:
         cfg = ScoreConfig(**config)
         return {
-            "ballots_required": cfg.voter_count,
+            "voter_labels": list(cfg.voter_labels),
+            "ballots_required": len(cfg.voter_labels),
             "ballots_submitted": 0,
             "min_score": cfg.min_score,
             "max_score": cfg.max_score,
@@ -36,6 +37,9 @@ class ScoreEngine(TournamentEngine):
         if self.is_complete(state):
             result = self.compute_result(state, [])
             return CompletedContext(result=result.model_dump(mode="json"))
+
+        if voter_label not in state["voter_labels"]:
+            raise ValidationError(f"Unknown voter: '{voter_label}'")
 
         voted_labels = {v["voter_label"] for v in state["votes"]}
         if voter_label in voted_labels:
@@ -50,6 +54,9 @@ class ScoreEngine(TournamentEngine):
 
     def submit_vote(self, state: dict[str, Any], voter_label: str, vote_payload: dict[str, Any]) -> dict[str, Any]:
         state = copy.deepcopy(state)
+
+        if voter_label not in state["voter_labels"]:
+            raise ValidationError(f"Unknown voter: '{voter_label}'")
 
         voted_labels = {v["voter_label"] for v in state["votes"]}
         if voter_label in voted_labels:

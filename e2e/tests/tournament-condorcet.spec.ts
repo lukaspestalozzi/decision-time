@@ -15,11 +15,11 @@ test.describe('Condorcet Tournament', () => {
     // Setup a condorcet tournament with 3 options (3 pairwise matchups)
     const { tournament } = await setupActiveCondorcetTournament(
       request, 'Condorcet Vote Test', ['Elm', 'Oak', 'Pine'],
-      { voter_count: 1 },
+      { voter_labels: ['default'] },
     );
 
-    // Navigate to the vote page with explicit voter label
-    await page.goto(`/tournaments/${tournament.id}/vote?voter=Voter+1`);
+    // Navigate to the vote page (single-voter, default label)
+    await page.goto(`/tournaments/${tournament.id}/vote`);
 
     // Wait for the condorcet matchup UI to appear
     await expect(page.getByText('Pairwise Comparison')).toBeVisible({ timeout: 15000 });
@@ -63,12 +63,12 @@ test.describe('Condorcet Tournament', () => {
     // Setup and complete a condorcet tournament via API
     const { tournament } = await setupActiveCondorcetTournament(
       request, 'Condorcet Matrix', ['A', 'B', 'C'],
-      { voter_count: 1 },
+      { voter_labels: ['default'] },
     );
 
-    // Complete via API (all matchups for Voter 1)
+    // Complete via API (all matchups for the single default voter)
     await completeCondorcetVoter(
-      request, tournament.id, 'Voter 1', tournament.version,
+      request, tournament.id, 'default', tournament.version,
     );
 
     // Navigate to the result page
@@ -101,10 +101,10 @@ test.describe('Condorcet Tournament', () => {
   });
 
   test('condorcet multi-voter', async ({ page, request }) => {
-    // Setup a condorcet tournament with voter_count=2
+    // Setup a condorcet tournament with 2 voters
     const { tournament } = await setupActiveCondorcetTournament(
       request, 'Condorcet Multi', ['Sun', 'Moon', 'Star'],
-      { voter_count: 2 },
+      { voter_labels: ['Voter 1', 'Voter 2'] },
     );
 
     // Voter 1 completes all matchups via API

@@ -107,8 +107,7 @@ class CondorcetEngine(TournamentEngine):
         voter_progress: dict[str, dict[str, int]] = {}
         rng = random.Random()
 
-        for i in range(cfg.voter_count):
-            label = f"Voter {i + 1}"
+        for label in cfg.voter_labels:
             order = list(matchup_ids)
             rng.shuffle(order)
             voter_matchup_orders[label] = order
@@ -118,7 +117,8 @@ class CondorcetEngine(TournamentEngine):
             }
 
         return {
-            "ballots_required": cfg.voter_count,
+            "voter_labels": list(cfg.voter_labels),
+            "ballots_required": len(cfg.voter_labels),
             "ballots_submitted": 0,
             "entry_ids": entry_ids,
             "matchups": matchups,
@@ -131,6 +131,9 @@ class CondorcetEngine(TournamentEngine):
         if self.is_complete(state):
             result = self.compute_result(state, [])
             return CompletedContext(result=result.model_dump(mode="json"))
+
+        if voter_label not in state["voter_labels"]:
+            raise ValidationError(f"Unknown voter: '{voter_label}'")
 
         progress = state["voter_progress"].get(voter_label)
         if progress is None or progress["completed_matchups"] >= progress["total_matchups"]:
@@ -155,6 +158,9 @@ class CondorcetEngine(TournamentEngine):
 
     def submit_vote(self, state: dict[str, Any], voter_label: str, vote_payload: dict[str, Any]) -> dict[str, Any]:
         state = copy.deepcopy(state)
+
+        if voter_label not in state["voter_labels"]:
+            raise ValidationError(f"Unknown voter: '{voter_label}'")
 
         matchup_id = vote_payload.get("matchup_id")
         winner_entry_id = vote_payload.get("winner_entry_id")

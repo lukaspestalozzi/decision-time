@@ -24,6 +24,10 @@ def _make_allocations(entries: list[TournamentEntry], votes: list[int]) -> dict:
     return {"allocations": [{"entry_id": str(e.id), "votes": v} for e, v in zip(entries, votes, strict=True)]}
 
 
+def _voter_labels(n: int) -> list[str]:
+    return [f"Voter {i + 1}" for i in range(n)]
+
+
 class TestMultivoteValidateConfig:
     def test_default_config_is_valid(self) -> None:
         engine = MultivoteEngine()
@@ -31,7 +35,7 @@ class TestMultivoteValidateConfig:
 
     def test_custom_config_is_valid(self) -> None:
         engine = MultivoteEngine()
-        assert engine.validate_config({"total_votes": 20, "max_per_option": 5, "voter_count": 3}) == []
+        assert engine.validate_config({"total_votes": 20, "max_per_option": 5, "voter_labels": _voter_labels(3)}) == []
 
 
 class TestMultivoteInitialize:
@@ -50,12 +54,27 @@ class TestMultivoteInitialize:
     def test_correct_state_structure(self) -> None:
         engine = MultivoteEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
+        assert state["voter_labels"] == ["Voter 1", "Voter 2"]
         assert state["ballots_required"] == 2
         assert state["ballots_submitted"] == 0
         assert state["total_votes"] == 6  # 3 * 2
         assert state["max_per_option"] is None
         assert len(state["entry_ids"]) == 3
+
+    def test_default_single_voter(self) -> None:
+        engine = MultivoteEngine()
+        entries = _make_entries(3)
+        state = engine.initialize(entries, {})
+        assert state["voter_labels"] == ["default"]
+        assert state["ballots_required"] == 1
+
+    def test_custom_voter_labels_preserved(self) -> None:
+        engine = MultivoteEngine()
+        entries = _make_entries(3)
+        state = engine.initialize(entries, {"voter_labels": ["Alice", "Bob"]})
+        assert state["voter_labels"] == ["Alice", "Bob"]
+        assert state["ballots_required"] == 2
 
 
 class TestMultivoteVoting:
@@ -64,7 +83,7 @@ class TestMultivoteVoting:
         entries = _make_entries(3)
         state = engine.initialize(entries, {})  # total_votes = 6
         payload = _make_allocations(entries, [3, 2, 1])
-        state = engine.submit_vote(state, "Voter 1", payload)
+        state = engine.submit_vote(state, "default", payload)
         assert state["ballots_submitted"] == 1
 
     def test_wrong_sum_raises(self) -> None:
@@ -73,7 +92,7 @@ class TestMultivoteVoting:
         state = engine.initialize(entries, {})  # total_votes = 6
         payload = _make_allocations(entries, [3, 2, 0])  # sum = 5, not 6
         with pytest.raises(ValidationError, match="total_votes"):
-            engine.submit_vote(state, "Voter 1", payload)
+            engine.submit_vote(state, "default", payload)
 
     def test_exceeds_max_per_option_raises(self) -> None:
         engine = MultivoteEngine()
@@ -81,16 +100,31 @@ class TestMultivoteVoting:
         state = engine.initialize(entries, {"max_per_option": 3})  # total_votes = 6, max = 3
         payload = _make_allocations(entries, [4, 1, 1])  # 4 > max of 3
         with pytest.raises(ValidationError, match="max_per_option"):
-            engine.submit_vote(state, "Voter 1", payload)
+            engine.submit_vote(state, "default", payload)
 
     def test_duplicate_voter_raises(self) -> None:
         engine = MultivoteEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         payload = _make_allocations(entries, [2, 2, 2])
         state = engine.submit_vote(state, "Voter 1", payload)
         with pytest.raises(ValidationError, match="already"):
             engine.submit_vote(state, "Voter 1", payload)
+
+    def test_unknown_voter_rejected(self) -> None:
+        engine = MultivoteEngine()
+        entries = _make_entries(3)
+        state = engine.initialize(entries, {"voter_labels": ["Alice", "Bob"]})
+        payload = _make_allocations(entries, [2, 2, 2])
+        with pytest.raises(ValidationError, match="Unknown voter"):
+            engine.submit_vote(state, "Charlie", payload)
+
+    def test_get_vote_context_unknown_voter_rejected(self) -> None:
+        engine = MultivoteEngine()
+        entries = _make_entries(3)
+        state = engine.initialize(entries, {"voter_labels": ["Alice", "Bob"]})
+        with pytest.raises(ValidationError, match="Unknown voter"):
+            engine.get_vote_context(state, "Charlie")
 
     def test_partial_allocation_ok(self) -> None:
         """Can vote for subset of entries — unlisted get 0 implicitly."""
@@ -104,13 +138,13 @@ class TestMultivoteVoting:
                 {"entry_id": str(entries[1].id), "votes": 2},
             ]
         }
-        state = engine.submit_vote(state, "Voter 1", payload)
+        state = engine.submit_vote(state, "default", payload)
         assert state["ballots_submitted"] == 1
 
     def test_ballot_context_for_new_voter(self) -> None:
         engine = MultivoteEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         ctx = engine.get_vote_context(state, "Voter 1")
         assert isinstance(ctx, BallotContext)
         assert ctx.ballot_type == "multivote"
@@ -119,7 +153,7 @@ class TestMultivoteVoting:
     def test_already_voted_context(self) -> None:
         engine = MultivoteEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         payload = _make_allocations(entries, [2, 2, 2])
         state = engine.submit_vote(state, "Voter 1", payload)
         ctx = engine.get_vote_context(state, "Voter 1")
@@ -132,7 +166,7 @@ class TestMultivoteFullFlow:
         entries = _make_entries(3)
         state = engine.initialize(entries, {})
         payload = _make_allocations(entries, [3, 2, 1])
-        state = engine.submit_vote(state, "Voter 1", payload)
+        state = engine.submit_vote(state, "default", payload)
         assert engine.is_complete(state)
         result = engine.compute_result(state, entries)
         assert len(result.winner_ids) == 1
@@ -140,7 +174,7 @@ class TestMultivoteFullFlow:
     def test_multi_voter_flow(self) -> None:
         engine = MultivoteEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         state = engine.submit_vote(state, "Voter 1", _make_allocations(entries, [3, 2, 1]))
         assert not engine.is_complete(state)
         state = engine.submit_vote(state, "Voter 2", _make_allocations(entries, [1, 2, 3]))
@@ -151,7 +185,7 @@ class TestMultivoteResult:
     def test_correct_totals(self) -> None:
         engine = MultivoteEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         # V1: [3,2,1], V2: [1,2,3] → totals: [4,4,4]
         state = engine.submit_vote(state, "Voter 1", _make_allocations(entries, [3, 2, 1]))
         state = engine.submit_vote(state, "Voter 2", _make_allocations(entries, [1, 2, 3]))
@@ -165,7 +199,7 @@ class TestMultivoteResult:
         engine = MultivoteEngine()
         entries = _make_entries(3)
         state = engine.initialize(entries, {})
-        state = engine.submit_vote(state, "Voter 1", _make_allocations(entries, [1, 4, 1]))
+        state = engine.submit_vote(state, "default", _make_allocations(entries, [1, 4, 1]))
         result = engine.compute_result(state, entries)
         rank_1 = [r for r in result.ranking if r["rank"] == 1]
         assert len(rank_1) == 1

@@ -21,6 +21,10 @@ def _make_entries(n: int) -> list[TournamentEntry]:
     ]
 
 
+def _voter_labels(n: int) -> list[str]:
+    return [f"Voter {i + 1}" for i in range(n)]
+
+
 def _vote_all_matchups(
     engine: CondorcetEngine,
     state: dict[str, Any],
@@ -53,9 +57,9 @@ class TestCondorcetValidateConfig:
         engine = CondorcetEngine()
         assert engine.validate_config({}) == []
 
-    def test_custom_voter_count_is_valid(self) -> None:
+    def test_custom_voter_labels_is_valid(self) -> None:
         engine = CondorcetEngine()
-        assert engine.validate_config({"voter_count": 5}) == []
+        assert engine.validate_config({"voter_labels": _voter_labels(5)}) == []
 
 
 class TestCondorcetInitialize:
@@ -80,7 +84,7 @@ class TestCondorcetInitialize:
     def test_voter_matchup_orders_cover_all_matchups(self) -> None:
         engine = CondorcetEngine()
         entries = _make_entries(4)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         matchup_ids = {m["matchup_id"] for m in state["matchups"]}
         for _voter_label, order in state["voter_matchup_orders"].items():
             assert set(order) == matchup_ids
@@ -88,7 +92,7 @@ class TestCondorcetInitialize:
     def test_voter_matchup_orders_are_randomized(self) -> None:
         engine = CondorcetEngine()
         entries = _make_entries(5)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         order_1 = state["voter_matchup_orders"]["Voter 1"]
         order_2 = state["voter_matchup_orders"]["Voter 2"]
         # With 10 matchups, probability of same order is 1/10! ≈ 0
@@ -99,7 +103,7 @@ class TestCondorcetInitialize:
     def test_voter_progress_initialized(self) -> None:
         engine = CondorcetEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         assert "Voter 1" in state["voter_progress"]
         assert "Voter 2" in state["voter_progress"]
         assert state["voter_progress"]["Voter 1"]["completed_matchups"] == 0
@@ -108,7 +112,8 @@ class TestCondorcetInitialize:
     def test_correct_state_structure(self) -> None:
         engine = CondorcetEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
+        assert state["voter_labels"] == ["Voter 1", "Voter 2"]
         assert state["ballots_required"] == 2
         assert state["ballots_submitted"] == 0
         assert "matchups" in state
@@ -116,13 +121,30 @@ class TestCondorcetInitialize:
         assert "voter_progress" in state
         assert "votes" in state
 
+    def test_default_single_voter(self) -> None:
+        engine = CondorcetEngine()
+        entries = _make_entries(3)
+        state = engine.initialize(entries, {})
+        assert state["voter_labels"] == ["default"]
+        assert "default" in state["voter_progress"]
+
+    def test_custom_voter_labels(self) -> None:
+        engine = CondorcetEngine()
+        entries = _make_entries(3)
+        state = engine.initialize(entries, {"voter_labels": ["Alice", "Bob"]})
+        assert state["voter_labels"] == ["Alice", "Bob"]
+        assert "Alice" in state["voter_matchup_orders"]
+        assert "Bob" in state["voter_matchup_orders"]
+        assert "Alice" in state["voter_progress"]
+        assert "Bob" in state["voter_progress"]
+
 
 class TestCondorcetVoting:
     def test_get_vote_context_returns_correct_matchup(self) -> None:
         engine = CondorcetEngine()
         entries = _make_entries(3)
         state = engine.initialize(entries, {})
-        ctx = engine.get_vote_context(state, "Voter 1")
+        ctx = engine.get_vote_context(state, "default")
         assert isinstance(ctx, CondorcetMatchupContext)
         assert ctx.matchup_number == 1
         assert ctx.total_matchups == 3
@@ -131,14 +153,14 @@ class TestCondorcetVoting:
         engine = CondorcetEngine()
         entries = _make_entries(3)
         state = engine.initialize(entries, {})
-        ctx = engine.get_vote_context(state, "Voter 1")
+        ctx = engine.get_vote_context(state, "default")
         assert isinstance(ctx, CondorcetMatchupContext)
         state = engine.submit_vote(
             state,
-            "Voter 1",
+            "default",
             {"matchup_id": ctx.matchup_id, "winner_entry_id": ctx.entry_a["id"]},
         )
-        assert state["voter_progress"]["Voter 1"]["completed_matchups"] == 1
+        assert state["voter_progress"]["default"]["completed_matchups"] == 1
 
     def test_wrong_matchup_id_raises(self) -> None:
         engine = CondorcetEngine()
@@ -147,7 +169,7 @@ class TestCondorcetVoting:
         with pytest.raises(ValidationError, match="not found"):
             engine.submit_vote(
                 state,
-                "Voter 1",
+                "default",
                 {"matchup_id": str(uuid.uuid4()), "winner_entry_id": str(uuid.uuid4())},
             )
 
@@ -155,19 +177,39 @@ class TestCondorcetVoting:
         engine = CondorcetEngine()
         entries = _make_entries(3)
         state = engine.initialize(entries, {})
-        ctx = engine.get_vote_context(state, "Voter 1")
+        ctx = engine.get_vote_context(state, "default")
         assert isinstance(ctx, CondorcetMatchupContext)
         with pytest.raises(ValidationError, match="participant"):
             engine.submit_vote(
                 state,
-                "Voter 1",
+                "default",
                 {"matchup_id": ctx.matchup_id, "winner_entry_id": str(uuid.uuid4())},
             )
+
+    def test_unknown_voter_rejected_on_submit(self) -> None:
+        engine = CondorcetEngine()
+        entries = _make_entries(3)
+        state = engine.initialize(entries, {"voter_labels": ["Alice", "Bob"]})
+        ctx = engine.get_vote_context(state, "Alice")
+        assert isinstance(ctx, CondorcetMatchupContext)
+        with pytest.raises(ValidationError, match="Unknown voter"):
+            engine.submit_vote(
+                state,
+                "Charlie",
+                {"matchup_id": ctx.matchup_id, "winner_entry_id": ctx.entry_a["id"]},
+            )
+
+    def test_unknown_voter_rejected_on_get_context(self) -> None:
+        engine = CondorcetEngine()
+        entries = _make_entries(3)
+        state = engine.initialize(entries, {"voter_labels": ["Alice", "Bob"]})
+        with pytest.raises(ValidationError, match="Unknown voter"):
+            engine.get_vote_context(state, "Charlie")
 
     def test_already_voted_context_when_voter_completes(self) -> None:
         engine = CondorcetEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         state = _vote_all_matchups(engine, state, "Voter 1")
         ctx = engine.get_vote_context(state, "Voter 1")
         assert isinstance(ctx, AlreadyVotedContext)
@@ -175,7 +217,7 @@ class TestCondorcetVoting:
     def test_multi_voter_independent_voting(self) -> None:
         engine = CondorcetEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         # Voter 1 votes 1 matchup
         ctx = engine.get_vote_context(state, "Voter 1")
         assert isinstance(ctx, CondorcetMatchupContext)
@@ -195,7 +237,7 @@ class TestCondorcetFullFlow:
         entries = _make_entries(3)
         state = engine.initialize(entries, {})
         assert not engine.is_complete(state)
-        state = _vote_all_matchups(engine, state, "Voter 1")
+        state = _vote_all_matchups(engine, state, "default")
         assert engine.is_complete(state)
         result = engine.compute_result(state, entries)
         assert len(result.winner_ids) >= 1
@@ -204,7 +246,7 @@ class TestCondorcetFullFlow:
     def test_multi_voter_3_entries(self) -> None:
         engine = CondorcetEngine()
         entries = _make_entries(3)
-        state = engine.initialize(entries, {"voter_count": 2})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(2)})
         state = _vote_all_matchups(engine, state, "Voter 1")
         assert not engine.is_complete(state)
         state = _vote_all_matchups(engine, state, "Voter 2")
@@ -214,7 +256,9 @@ class TestCondorcetFullFlow:
         engine = CondorcetEngine()
         entries = _make_entries(3)
         state = engine.initialize(entries, {})
-        state = _vote_all_matchups(engine, state, "Voter 1")
+        state = _vote_all_matchups(engine, state, "default")
+        # Once complete, get_vote_context returns CompletedContext for any label
+        # (the completion check runs before voter validation)
         ctx = engine.get_vote_context(state, "Anyone")
         assert isinstance(ctx, CompletedContext)
 
@@ -229,7 +273,7 @@ class TestSchulzeMethod:
 
         # Vote A>B, A>C, B>C (A always wins)
         preference = entry_ids  # A > B > C
-        state = _vote_all_matchups(engine, state, "Voter 1", preference_order=preference)
+        state = _vote_all_matchups(engine, state, "default", preference_order=preference)
 
         result = engine.compute_result(state, entries)
         assert len(result.winner_ids) == 1
@@ -242,7 +286,7 @@ class TestSchulzeMethod:
         engine = CondorcetEngine()
         entries = _make_entries(3)
         entry_ids = [str(e.id) for e in entries]
-        state = engine.initialize(entries, {"voter_count": 3})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(3)})
 
         # Voter 1: A>B>C, Voter 2: B>C>A, Voter 3: C>A>B
         a, b, c = entry_ids
@@ -285,7 +329,7 @@ class TestSchulzeMethod:
         engine = CondorcetEngine()
         entries = _make_entries(4)
         entry_ids = [str(e.id) for e in entries]
-        state = engine.initialize(entries, {"voter_count": 3})
+        state = engine.initialize(entries, {"voter_labels": _voter_labels(3)})
 
         a, b, c, d = entry_ids
         state = _vote_all_matchups(engine, state, "Voter 1", preference_order=[a, b, c, d])
@@ -303,7 +347,7 @@ class TestSchulzeMethod:
         engine = CondorcetEngine()
         entries = _make_entries(3)
         state = engine.initialize(entries, {})
-        state = _vote_all_matchups(engine, state, "Voter 1")
+        state = _vote_all_matchups(engine, state, "default")
         result = engine.compute_result(state, entries)
         assert "pairwise_matrix" in result.metadata
         assert "path_strengths" in result.metadata
@@ -320,5 +364,5 @@ class TestCondorcetIsComplete:
         engine = CondorcetEngine()
         entries = _make_entries(3)
         state = engine.initialize(entries, {})
-        state = _vote_all_matchups(engine, state, "Voter 1")
+        state = _vote_all_matchups(engine, state, "default")
         assert engine.is_complete(state)

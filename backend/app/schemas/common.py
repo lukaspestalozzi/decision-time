@@ -3,9 +3,12 @@
 import re
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+
+MAX_VOTER_LABELS = 50
+MAX_VOTER_LABEL_LENGTH = 50
 
 
 def normalize_tag(raw: str) -> str | None:
@@ -57,35 +60,74 @@ class DecisionTimeModel(BaseModel):
         return v.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-class BracketConfig(BaseModel):
+class TournamentConfig(DecisionTimeModel):
+    """Base config shared by all tournament modes.
+
+    Owns `voter_labels`: the list of voter identities for the tournament.
+    Count is always `len(voter_labels)`.
+    """
+
+    voter_labels: list[str] = Field(default_factory=lambda: ["default"])
+
+    @model_validator(mode="after")
+    def _validate_voter_labels(self) -> Self:
+        trimmed = [label.strip() for label in self.voter_labels]
+        if len(trimmed) < 1:
+            raise ValueError("at least one voter label is required")
+        if len(trimmed) > MAX_VOTER_LABELS:
+            raise ValueError(f"at most {MAX_VOTER_LABELS} voter labels allowed")
+        for label in trimmed:
+            if not label:
+                raise ValueError("voter labels cannot be empty or whitespace-only")
+            if len(label) > MAX_VOTER_LABEL_LENGTH:
+                raise ValueError(f"voter labels must be at most {MAX_VOTER_LABEL_LENGTH} characters")
+        if len(set(trimmed)) != len(trimmed):
+            raise ValueError("voter labels must be unique")
+        self.voter_labels = trimmed
+        return self
+
+
+class BracketConfig(TournamentConfig):
     shuffle_seed: bool = True
     third_place_match: bool = False
 
+    @model_validator(mode="after")
+    def _validate_bracket_single_voter(self) -> Self:
+        if len(self.voter_labels) != 1:
+            raise ValueError("bracket mode supports only a single voter")
+        return self
 
-class ScoreConfig(BaseModel):
+
+class ScoreConfig(TournamentConfig):
     min_score: int = 1
     max_score: int = 5
-    voter_count: int = 1
 
 
-class MultivoteConfig(BaseModel):
+class MultivoteConfig(TournamentConfig):
     total_votes: int | None = None
     max_per_option: int | None = None
-    voter_count: int = 1
 
 
-class CondorcetConfig(BaseModel):
-    voter_count: int = 1
+class CondorcetConfig(TournamentConfig):
+    pass
 
 
-DEFAULT_CONFIGS: dict[TournamentMode, BaseModel] = {
-    TournamentMode.BRACKET: BracketConfig(),
-    TournamentMode.SCORE: ScoreConfig(),
-    TournamentMode.MULTIVOTE: MultivoteConfig(),
-    TournamentMode.CONDORCET: CondorcetConfig(),
+CONFIG_CLASSES: dict[TournamentMode, type[TournamentConfig]] = {
+    TournamentMode.BRACKET: BracketConfig,
+    TournamentMode.SCORE: ScoreConfig,
+    TournamentMode.MULTIVOTE: MultivoteConfig,
+    TournamentMode.CONDORCET: CondorcetConfig,
 }
 
 
 def get_default_config(mode: TournamentMode) -> dict[str, Any]:
     """Return the default config dict for a tournament mode."""
-    return DEFAULT_CONFIGS[mode].model_dump()
+    return CONFIG_CLASSES[mode]().model_dump()
+
+
+def normalize_config(mode: TournamentMode, config: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize a config dict for a tournament mode.
+
+    Raises pydantic.ValidationError on invalid input.
+    """
+    return CONFIG_CLASSES[mode](**config).model_dump()
