@@ -395,3 +395,222 @@ class TestHealthEndpoint:
         resp = client.get("/api/v1/health")
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}
+
+
+class TestUndoEndpoint:
+    """Tests for POST /tournaments/{id}/undo."""
+
+    def _setup_active_2voter_score(self, client: TestClient, *, allow_undo: bool = True) -> tuple[str, int]:
+        """Create + activate a 2-voter score tournament. Returns (tid, version)."""
+        options = _create_options(client, 3)
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "score"})
+        tid = create.json()["id"]
+        version = create.json()["version"]
+        config = {
+            "min_score": 1,
+            "max_score": 5,
+            "voter_labels": ["Alice", "Bob"],
+            "allow_undo": allow_undo,
+        }
+        upd = client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={
+                "version": version,
+                "selected_option_ids": [o["id"] for o in options],
+                "config": config,
+            },
+        )
+        version = upd.json()["version"]
+        act = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": version})
+        return tid, act.json()["version"]
+
+    def _vote_as(self, client: TestClient, tid: str, version: int, voter: str, scores: list[int]) -> dict:
+        t = client.get(f"/api/v1/tournaments/{tid}").json()
+        entry_ids = [e["id"] for e in t["entries"]]
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/vote",
+            json={
+                "version": version,
+                "voter_label": voter,
+                "payload": {
+                    "scores": [{"entry_id": eid, "score": s} for eid, s in zip(entry_ids, scores, strict=True)]
+                },
+            },
+        )
+        return resp.json()
+
+    def test_undo_returns_200_with_tournament_and_context(self, client: TestClient) -> None:
+        tid, v = self._setup_active_2voter_score(client)
+        after_vote = self._vote_as(client, tid, v, "Alice", [5, 3, 1])
+        v = after_vote["version"]
+
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/undo",
+            json={"version": v, "voter_label": "Alice"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "tournament" in body
+        assert "vote_context" in body
+        # Alice can vote again — context should be a ballot
+        assert body["vote_context"]["type"] == "ballot"
+
+    def test_undo_missing_version_returns_422(self, client: TestClient) -> None:
+        tid, _ = self._setup_active_2voter_score(client)
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/undo",
+            json={"voter_label": "Alice"},
+        )
+        assert resp.status_code == 422
+
+    def test_undo_missing_voter_label_returns_422(self, client: TestClient) -> None:
+        tid, v = self._setup_active_2voter_score(client)
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/undo",
+            json={"version": v},
+        )
+        assert resp.status_code == 422
+
+    def test_undo_stale_version_returns_409(self, client: TestClient) -> None:
+        tid, v = self._setup_active_2voter_score(client)
+        after_vote = self._vote_as(client, tid, v, "Alice", [5, 3, 1])
+        stale_v = after_vote["version"] - 1
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/undo",
+            json={"version": stale_v, "voter_label": "Alice"},
+        )
+        assert resp.status_code == 409
+
+    def test_undo_no_vote_returns_422(self, client: TestClient) -> None:
+        tid, v = self._setup_active_2voter_score(client)
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/undo",
+            json={"version": v, "voter_label": "Alice"},
+        )
+        assert resp.status_code == 422
+
+    def test_undo_unknown_voter_returns_422(self, client: TestClient) -> None:
+        tid, v = self._setup_active_2voter_score(client)
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/undo",
+            json={"version": v, "voter_label": "Charlie"},
+        )
+        assert resp.status_code == 422
+
+    def test_undo_on_completed_returns_409(self, client: TestClient) -> None:
+        """With test client's 0-second cool-off, single-voter submit completes immediately."""
+        options = _create_options(client, 3)
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "score"})
+        tid = create.json()["id"]
+        v = create.json()["version"]
+        upd = client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={
+                "version": v,
+                "selected_option_ids": [o["id"] for o in options],
+                "config": {"voter_labels": ["Alice"]},
+            },
+        )
+        v = upd.json()["version"]
+        v = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": v}).json()["version"]
+        after = self._vote_as(client, tid, v, "Alice", [5, 3, 1])
+        assert after["status"] == "completed"
+
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/undo",
+            json={"version": after["version"], "voter_label": "Alice"},
+        )
+        assert resp.status_code == 409
+
+    def test_undo_disabled_returns_409(self, client: TestClient) -> None:
+        tid, v = self._setup_active_2voter_score(client, allow_undo=False)
+        after_vote = self._vote_as(client, tid, v, "Alice", [5, 3, 1])
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/undo",
+            json={"version": after_vote["version"], "voter_label": "Alice"},
+        )
+        assert resp.status_code == 409
+
+    def test_undo_preserves_vote_record_as_superseded(self, client: TestClient) -> None:
+        tid, v = self._setup_active_2voter_score(client)
+        after_vote = self._vote_as(client, tid, v, "Alice", [5, 3, 1])
+        v = after_vote["version"]
+        client.post(
+            f"/api/v1/tournaments/{tid}/undo",
+            json={"version": v, "voter_label": "Alice"},
+        )
+        t = client.get(f"/api/v1/tournaments/{tid}").json()
+        assert len(t["votes"]) == 1
+        assert t["votes"][0]["status"] == "superseded"
+        assert t["votes"][0]["superseded_at"] is not None
+
+    def test_response_includes_refreshed_tournament_status(self, client: TestClient) -> None:
+        tid, v = self._setup_active_2voter_score(client)
+        after_vote = self._vote_as(client, tid, v, "Alice", [5, 3, 1])
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/undo",
+            json={"version": after_vote["version"], "voter_label": "Alice"},
+        )
+        tournament = resp.json()["tournament"]
+        assert tournament["status"] == "active"
+        assert tournament["cool_off_ends_at"] is None
+
+
+class TestCoolOffAPI:
+    """Verify that cool_off_ends_at appears in tournament responses during cool-off."""
+
+    def test_cool_off_ends_at_exposed_in_response(self) -> None:
+        """Use a dedicated client with non-zero cool-off to observe the field."""
+        # Use a tmp data dir via pytest's tmp_path by constructing manually
+        import tempfile
+        from pathlib import Path
+
+        from fastapi.testclient import TestClient
+
+        from app.dependencies import get_option_service, get_tournament_service
+        from app.main import app
+        from app.repositories.options import OptionRepository
+        from app.repositories.tournaments import TournamentRepository
+        from app.services.option_service import OptionService
+        from app.services.tournament_service import TournamentService
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            option_repo = OptionRepository(data)
+            tournament_repo = TournamentRepository(data)
+            app.dependency_overrides[get_option_service] = lambda: OptionService(option_repo)
+            app.dependency_overrides[get_tournament_service] = lambda: TournamentService(
+                tournament_repo, option_repo, cool_off_seconds=60
+            )
+            try:
+                client = TestClient(app)
+                options = _create_options(client, 3)
+                create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "score"})
+                tid = create.json()["id"]
+                v = create.json()["version"]
+                upd = client.put(
+                    f"/api/v1/tournaments/{tid}",
+                    json={
+                        "version": v,
+                        "selected_option_ids": [o["id"] for o in options],
+                        "config": {"voter_labels": ["Alice"]},
+                    },
+                )
+                v = upd.json()["version"]
+                v = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": v}).json()["version"]
+                # Submit the only vote — this should enter cool-off (not complete)
+                t = client.get(f"/api/v1/tournaments/{tid}").json()
+                eids = [e["id"] for e in t["entries"]]
+                resp = client.post(
+                    f"/api/v1/tournaments/{tid}/vote",
+                    json={
+                        "version": v,
+                        "voter_label": "Alice",
+                        "payload": {"scores": [{"entry_id": e, "score": 3} for e in eids]},
+                    },
+                )
+                body = resp.json()
+                assert body["status"] == "active"
+                assert body["cool_off_ends_at"] is not None
+            finally:
+                app.dependency_overrides.clear()

@@ -1,6 +1,6 @@
 """Tournament service — lifecycle orchestration between repos and engines."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -13,15 +13,23 @@ from app.exceptions import InvalidStateError, ValidationError
 from app.repositories.options import OptionRepository
 from app.repositories.tournaments import TournamentRepository
 from app.schemas.common import TournamentMode, TournamentStatus, get_default_config, normalize_config
-from app.schemas.tournament import Result, Tournament, TournamentEntry, Vote
+from app.schemas.tournament import Result, Tournament, TournamentEntry, Vote, VoteStatus
+
+DEFAULT_COOL_OFF_SECONDS = 30
 
 
 class TournamentService:
     """Orchestrates tournament lifecycle: creation, activation, voting, completion."""
 
-    def __init__(self, tournament_repo: TournamentRepository, option_repo: OptionRepository) -> None:
+    def __init__(
+        self,
+        tournament_repo: TournamentRepository,
+        option_repo: OptionRepository,
+        cool_off_seconds: float = DEFAULT_COOL_OFF_SECONDS,
+    ) -> None:
         self._repo = tournament_repo
         self._option_repo = option_repo
+        self._cool_off_seconds = cool_off_seconds
 
     def _get_engine(self, mode: TournamentMode) -> TournamentEngine:
         engines: dict[TournamentMode, TournamentEngine] = {
@@ -39,7 +47,27 @@ class TournamentService:
         return self._repo.list_all(status=status)
 
     def get_tournament(self, tournament_id: UUID) -> Tournament:
-        return self._repo.get(tournament_id)
+        tournament = self._repo.get(tournament_id)
+        if self._finalize_if_cool_off_expired(tournament):
+            return self._repo.save(tournament, expected_version=tournament.version)
+        return tournament
+
+    def _finalize_if_cool_off_expired(self, tournament: Tournament) -> bool:
+        """Mutate `tournament` to COMPLETED if cool-off has expired.
+
+        Returns True if the tournament was finalized (caller should persist),
+        False otherwise. Pure — does no I/O.
+        """
+        if tournament.cool_off_ends_at is None:
+            return False
+        if datetime.now(UTC) < tournament.cool_off_ends_at:
+            return False
+        engine = self._get_engine(tournament.mode)
+        tournament.status = TournamentStatus.COMPLETED
+        tournament.completed_at = datetime.now(UTC)
+        tournament.cool_off_ends_at = None
+        tournament.result = engine.compute_result(tournament.state, tournament.entries)
+        return True
 
     def create_tournament(self, name: str, mode: TournamentMode, description: str = "") -> Tournament:
         tournament = Tournament(
@@ -157,12 +185,53 @@ class TournamentService:
         tournament.votes.append(vote)
         tournament.state = new_state
 
-        # Check completion
+        # When the last required vote arrives, start the cool-off window instead of
+        # completing immediately. Voters get a 30s (configurable) grace period to
+        # edit/undo before the result is final. Completion is lazy — happens on
+        # the next get_tournament() after the window expires. When cool_off_seconds
+        # is 0 (e.g., in tests) we finalize immediately in the same call.
         if engine.is_complete(new_state):
-            result = engine.compute_result(new_state, tournament.entries)
-            tournament.result = result
-            tournament.status = TournamentStatus.COMPLETED
-            tournament.completed_at = datetime.now(UTC)
+            tournament.cool_off_ends_at = datetime.now(UTC) + timedelta(seconds=self._cool_off_seconds)
+            self._finalize_if_cool_off_expired(tournament)
+
+        return self._repo.save(tournament, expected_version=version)
+
+    def undo_vote(self, tournament_id: UUID, version: int, voter_label: str) -> Tournament:
+        """Soft-supersede the latest active vote for `voter_label` and replay state.
+
+        Rejected if: tournament not active, allow_undo is False, voter unknown,
+        or no active vote exists for this voter.
+        """
+        tournament = self._repo.get(tournament_id)
+        if tournament.status != TournamentStatus.ACTIVE:
+            raise InvalidStateError("Undo is only available on active tournaments")
+
+        allow_undo = tournament.config.get("allow_undo", True)
+        if not allow_undo:
+            raise InvalidStateError("Undo is disabled for this tournament")
+
+        voter_labels = tournament.config.get("voter_labels", [])
+        if voter_label not in voter_labels:
+            raise ValidationError(f"Unknown voter: '{voter_label}'")
+
+        # Find the latest active vote for this voter
+        active_votes_for_voter = [
+            v for v in tournament.votes if v.voter_label == voter_label and v.status == VoteStatus.ACTIVE
+        ]
+        if not active_votes_for_voter:
+            raise ValidationError(f"No vote to undo for voter '{voter_label}'")
+
+        latest = max(active_votes_for_voter, key=lambda v: v.submitted_at)
+        latest.status = VoteStatus.SUPERSEDED
+        latest.superseded_at = datetime.now(UTC)
+
+        # Replay state from remaining active votes
+        engine = self._get_engine(tournament.mode)
+        active_votes = [v for v in tournament.votes if v.status == VoteStatus.ACTIVE]
+        tournament.state = engine.replay_state(tournament.entries, tournament.config, active_votes)
+
+        # Undo always cancels any pending cool-off — we're back to active voting
+        tournament.cool_off_ends_at = None
 
         return self._repo.save(tournament, expected_version=version)
 

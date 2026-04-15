@@ -1,11 +1,14 @@
 """Abstract tournament engine interface and VoteContext models."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel
 
 from app.schemas.tournament import Result, TournamentEntry
+
+if TYPE_CHECKING:
+    from app.schemas.tournament import Vote
 
 # --- VoteContext models (tagged union) ---
 
@@ -83,3 +86,19 @@ class TournamentEngine(ABC):
     @abstractmethod
     def compute_result(self, state: dict[str, Any], entries: list[TournamentEntry]) -> Result:
         """Compute final ranking and winner(s)."""
+
+    def replay_state(
+        self,
+        entries: list[TournamentEntry],
+        config: dict[str, Any],
+        active_votes: list["Vote"],
+    ) -> dict[str, Any]:
+        """Rebuild state by initializing then applying each active vote in chronological order.
+
+        Default implementation works for Score, Multivote, and Condorcet. Bracket
+        overrides this to preserve deterministic seeding (see BracketEngine).
+        """
+        state = self.initialize(entries, config)
+        for vote in sorted(active_votes, key=lambda v: v.submitted_at):
+            state = self.submit_vote(state, vote.voter_label, vote.payload)
+        return state

@@ -44,6 +44,13 @@ class VoteRequest(BaseModel):
     payload: dict[str, Any]
 
 
+class UndoRequest(BaseModel):
+    version: int
+    voter_label: str
+    # Forward-compat — only "latest" accepted in v1.
+    scope: str = "latest"
+
+
 # --- Endpoints ---
 
 
@@ -155,6 +162,33 @@ def submit_vote(
         payload=body.payload,
     )
     return tournament.model_dump(mode="json")
+
+
+@router.post("/tournaments/{tournament_id}/undo")
+def undo_vote(
+    tournament_id: UUID,
+    body: UndoRequest,
+    service: TournamentService = Depends(get_tournament_service),
+) -> dict[str, Any]:
+    """Undo the calling voter's most recent active vote.
+
+    Returns the refreshed tournament and the voter's new vote_context in a
+    single response so the UI can update without a second round-trip.
+    """
+    if body.scope != "latest":
+        from app.exceptions import ValidationError
+
+        raise ValidationError(f"Unsupported undo scope: '{body.scope}'")
+    tournament = service.undo_vote(
+        tournament_id,
+        version=body.version,
+        voter_label=body.voter_label,
+    )
+    vote_context = service.get_vote_context(tournament_id, voter_label=body.voter_label)
+    return {
+        "tournament": tournament.model_dump(mode="json"),
+        "vote_context": vote_context.model_dump(mode="json"),
+    }
 
 
 @router.get("/tournaments/{tournament_id}/result")

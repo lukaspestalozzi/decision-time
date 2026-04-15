@@ -106,6 +106,16 @@ export class ApiService {
     return this.http.post<Tournament>(`${this.base}/tournaments/${id}/vote`, body);
   }
 
+  undoVote(id: string, body: {
+    version: number;
+    voter_label: string;
+  }): Observable<{ tournament: Tournament; vote_context: VoteContext }> {
+    return this.http.post<{ tournament: Tournament; vote_context: VoteContext }>(
+      `${this.base}/tournaments/${id}/undo`,
+      body,
+    );
+  }
+
   getResult(id: string): Observable<Result> {
     return this.http.get<Result>(`${this.base}/tournaments/${id}/result`);
   }

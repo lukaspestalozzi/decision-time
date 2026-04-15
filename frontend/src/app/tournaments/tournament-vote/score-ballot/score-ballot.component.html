@@ -19,6 +19,6 @@
 
 <div class="submit">
   <button mat-raised-button color="primary" [disabled]="!allScored" (click)="submit()">
-    Submit Scores
+    {{ isEditing ? 'Update Scores' : 'Submit Scores' }}
   </button>
 </div>

@@ -13,6 +13,7 @@ class AppConfig(BaseModel):
     port: int = Field(default=8009)
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
     log_level: str = Field(default="info")
+    undo_cool_off_seconds: int = Field(default=30)
 
 
 def load_config() -> AppConfig:
@@ -23,4 +24,5 @@ def load_config() -> AppConfig:
         port=int(os.environ.get("PORT", "8009")),
         cors_origins=[o.strip() for o in cors_raw.split(",")],
         log_level=os.environ.get("LOG_LEVEL", "info"),
+        undo_cool_off_seconds=int(os.environ.get("UNDO_COOL_OFF_SECONDS", "30")),
     )

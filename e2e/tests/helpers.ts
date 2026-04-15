@@ -214,7 +214,7 @@ export async function setupActiveScoreTournament(
   request: APIRequestContext,
   tournamentName: string,
   optionNames: string[],
-  config: { min_score?: number; max_score?: number; voter_labels?: string[] } = {},
+  config: { min_score?: number; max_score?: number; voter_labels?: string[]; allow_undo?: boolean } = {},
 ): Promise<{ tournament: any; options: any[] }> {
   const options = await createOptions(request, optionNames);
   let tournament = await createTournament(request, tournamentName, 'score');

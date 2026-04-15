@@ -204,3 +204,39 @@ class TestMultivoteResult:
         rank_1 = [r for r in result.ranking if r["rank"] == 1]
         assert len(rank_1) == 1
         assert rank_1[0]["entry_id"] == str(entries[1].id)
+
+
+class TestMultivoteReplayState:
+    def test_replay_with_no_votes_equals_initialize(self) -> None:
+        engine = MultivoteEngine()
+        entries = _make_entries(3)
+        config = {"total_votes": 6, "voter_labels": _voter_labels(2)}
+        initial = engine.initialize(entries, config)
+        replayed = engine.replay_state(entries, config, [])
+        assert replayed == initial
+
+    def test_replay_with_single_vote_equals_sequential_submit(self) -> None:
+        from app.schemas.tournament import Vote
+
+        engine = MultivoteEngine()
+        entries = _make_entries(3)
+        config = {"total_votes": 6, "voter_labels": _voter_labels(2)}
+        payload = _make_allocations(entries, [3, 2, 1])
+        sequential = engine.submit_vote(engine.initialize(entries, config), "Voter 1", payload)
+        replayed = engine.replay_state(entries, config, [Vote(voter_label="Voter 1", payload=payload)])
+        assert replayed == sequential
+
+    def test_replay_omitting_a_vote_allows_resubmit(self) -> None:
+        from app.schemas.tournament import Vote
+
+        engine = MultivoteEngine()
+        entries = _make_entries(3)
+        config = {"total_votes": 6, "voter_labels": _voter_labels(2)}
+        votes = [
+            Vote(voter_label="Voter 1", payload=_make_allocations(entries, [3, 2, 1])),
+            Vote(voter_label="Voter 2", payload=_make_allocations(entries, [1, 2, 3])),
+        ]
+        partial = engine.replay_state(entries, config, votes[:1])
+        assert not engine.is_complete(partial)
+        new_state = engine.submit_vote(partial, "Voter 2", _make_allocations(entries, [2, 2, 2]))
+        assert engine.is_complete(new_state)

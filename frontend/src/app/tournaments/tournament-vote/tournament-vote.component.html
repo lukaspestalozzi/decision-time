@@ -19,13 +19,31 @@
       }
       @case ('ballot') {
         @if ($any(voteContext()).ballot_type === 'score') {
-          <app-score-ballot [context]="$any(voteContext())" [tournament]="tournament()!" (vote)="onVote($event)" />
+          <app-score-ballot
+            [context]="$any(voteContext())"
+            [tournament]="tournament()!"
+            [initialScores]="initialScores()"
+            (vote)="onVote($event)"
+          />
         } @else {
-          <app-multivote-ballot [context]="$any(voteContext())" [tournament]="tournament()!" (vote)="onVote($event)" />
+          <app-multivote-ballot
+            [context]="$any(voteContext())"
+            [tournament]="tournament()!"
+            [initialAllocations]="initialAllocations()"
+            (vote)="onVote($event)"
+          />
         }
       }
       @case ('already_voted') {
-        <app-already-voted />
+        @if (currentVoterVote()) {
+          <app-ballot-summary
+            [tournament]="tournament()!"
+            [voterLabel]="currentVoter()"
+            (editClicked)="onEditBallot()"
+          />
+        } @else {
+          <app-already-voted />
+        }
       }
       @case ('completed') {
         <app-tournament-result [tournament]="tournament()!" />

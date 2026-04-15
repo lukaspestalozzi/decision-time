@@ -1,0 +1,59 @@
+.ballot-summary {
+  max-width: 480px;
+  margin: 24px auto;
+  padding: 24px;
+
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+
+    .icon {
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
+      color: #2e7d32;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 500;
+    }
+  }
+
+  .summary-rows {
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 8px 0;
+    margin-bottom: 16px;
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 14px;
+
+      .row-value {
+        font-weight: 500;
+      }
+    }
+  }
+
+  .progress {
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.6);
+
+    .finalizing {
+      color: #bf360c;
+      font-weight: 500;
+    }
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+}
