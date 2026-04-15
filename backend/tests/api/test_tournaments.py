@@ -299,6 +299,97 @@ class TestFullBracketFlow:
         assert ctx["type"] == "completed"
 
 
+class TestCustomVoterLabels:
+    def _setup_active_score(self, client: TestClient, voter_labels: list[str] | None = None) -> tuple[str, int]:
+        """Create + activate a 3-option score tournament with optional custom voter labels."""
+        options = _create_options(client, 3)
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "score"})
+        tid = create.json()["id"]
+        config: dict = {"min_score": 1, "max_score": 5}
+        if voter_labels is not None:
+            config["voter_labels"] = voter_labels
+        client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={
+                "version": 1,
+                "selected_option_ids": [o["id"] for o in options],
+                "config": config,
+            },
+        )
+        resp = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": 2})
+        return tid, resp.json()["version"]
+
+    def test_create_score_with_custom_labels_round_trips(self, client: TestClient) -> None:
+        tid, _ = self._setup_active_score(client, voter_labels=["Alice", "Bob"])
+        resp = client.get(f"/api/v1/tournaments/{tid}")
+        assert resp.status_code == 200
+        assert resp.json()["config"]["voter_labels"] == ["Alice", "Bob"]
+
+    def test_default_voter_label_is_default(self, client: TestClient) -> None:
+        tid, _ = self._setup_active_score(client)
+        assert client.get(f"/api/v1/tournaments/{tid}").json()["config"]["voter_labels"] == ["default"]
+
+    def test_vote_context_for_known_voter(self, client: TestClient) -> None:
+        tid, _ = self._setup_active_score(client, voter_labels=["Alice", "Bob"])
+        resp = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "Alice"})
+        assert resp.status_code == 200
+        assert resp.json()["type"] == "ballot"
+
+    def test_vote_context_for_unknown_voter_returns_422(self, client: TestClient) -> None:
+        tid, _ = self._setup_active_score(client, voter_labels=["Alice", "Bob"])
+        resp = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "Charlie"})
+        assert resp.status_code == 422
+        assert "Unknown voter" in resp.json()["error"]["message"]
+
+    def test_submit_vote_for_unknown_voter_returns_422(self, client: TestClient) -> None:
+        tid, version = self._setup_active_score(client, voter_labels=["Alice", "Bob"])
+        # Get entry IDs by fetching the tournament
+        entries = client.get(f"/api/v1/tournaments/{tid}").json()["entries"]
+        scores = [{"entry_id": e["id"], "score": 3} for e in entries]
+        resp = client.post(
+            f"/api/v1/tournaments/{tid}/vote",
+            json={"version": version, "voter_label": "Charlie", "payload": {"scores": scores}},
+        )
+        assert resp.status_code == 422
+        assert "Unknown voter" in resp.json()["error"]["message"]
+
+    def test_vote_then_revote_same_voter_returns_422(self, client: TestClient) -> None:
+        tid, version = self._setup_active_score(client, voter_labels=["Alice", "Bob"])
+        entries = client.get(f"/api/v1/tournaments/{tid}").json()["entries"]
+        scores = [{"entry_id": e["id"], "score": 3} for e in entries]
+        resp1 = client.post(
+            f"/api/v1/tournaments/{tid}/vote",
+            json={"version": version, "voter_label": "Alice", "payload": {"scores": scores}},
+        )
+        assert resp1.status_code == 200
+        resp2 = client.post(
+            f"/api/v1/tournaments/{tid}/vote",
+            json={"version": resp1.json()["version"], "voter_label": "Alice", "payload": {"scores": scores}},
+        )
+        assert resp2.status_code == 422
+        assert "already" in resp2.json()["error"]["message"].lower()
+
+    def test_bracket_rejects_multiple_voter_labels_at_update(self, client: TestClient) -> None:
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        resp = client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={"version": 1, "config": {"voter_labels": ["Alice", "Bob"]}},
+        )
+        assert resp.status_code == 422
+        assert "single voter" in resp.json()["error"]["message"].lower()
+
+    def test_invalid_voter_labels_at_update_returns_422(self, client: TestClient) -> None:
+        # duplicate labels
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "score"})
+        tid = create.json()["id"]
+        resp = client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={"version": 1, "config": {"voter_labels": ["Alice", "Alice"]}},
+        )
+        assert resp.status_code == 422
+
+
 class TestHealthEndpoint:
     def test_health_returns_ok(self, client: TestClient) -> None:
         resp = client.get("/api/v1/health")

@@ -214,7 +214,7 @@ export async function setupActiveScoreTournament(
   request: APIRequestContext,
   tournamentName: string,
   optionNames: string[],
-  config: { min_score?: number; max_score?: number; voter_count?: number } = {},
+  config: { min_score?: number; max_score?: number; voter_labels?: string[] } = {},
 ): Promise<{ tournament: any; options: any[] }> {
   const options = await createOptions(request, optionNames);
   let tournament = await createTournament(request, tournamentName, 'score');
@@ -224,7 +224,7 @@ export async function setupActiveScoreTournament(
   );
   tournament = await setTournamentConfig(
     request, tournament.id, tournament.version,
-    { min_score: 1, max_score: 5, voter_count: 1, ...config },
+    { min_score: 1, max_score: 5, voter_labels: ['default'], ...config },
   );
   tournament = await activateTournament(request, tournament.id, tournament.version);
   return { tournament, options };
@@ -238,7 +238,7 @@ export async function setupActiveMultivoteTournament(
   request: APIRequestContext,
   tournamentName: string,
   optionNames: string[],
-  config: { total_votes?: number | null; max_per_option?: number | null; voter_count?: number } = {},
+  config: { total_votes?: number | null; max_per_option?: number | null; voter_labels?: string[] } = {},
 ): Promise<{ tournament: any; options: any[] }> {
   const options = await createOptions(request, optionNames);
   let tournament = await createTournament(request, tournamentName, 'multivote');
@@ -248,7 +248,7 @@ export async function setupActiveMultivoteTournament(
   );
   tournament = await setTournamentConfig(
     request, tournament.id, tournament.version,
-    { total_votes: null, max_per_option: null, voter_count: 1, ...config },
+    { total_votes: null, max_per_option: null, voter_labels: ['default'], ...config },
   );
   tournament = await activateTournament(request, tournament.id, tournament.version);
   return { tournament, options };
@@ -262,7 +262,7 @@ export async function setupActiveCondorcetTournament(
   request: APIRequestContext,
   tournamentName: string,
   optionNames: string[],
-  config: { voter_count?: number } = {},
+  config: { voter_labels?: string[] } = {},
 ): Promise<{ tournament: any; options: any[] }> {
   const options = await createOptions(request, optionNames);
   let tournament = await createTournament(request, tournamentName, 'condorcet');
@@ -272,7 +272,7 @@ export async function setupActiveCondorcetTournament(
   );
   tournament = await setTournamentConfig(
     request, tournament.id, tournament.version,
-    { voter_count: 1, ...config },
+    { voter_labels: ['default'], ...config },
   );
   tournament = await activateTournament(request, tournament.id, tournament.version);
   return { tournament, options };

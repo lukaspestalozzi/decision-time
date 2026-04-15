@@ -16,7 +16,7 @@ test.describe('Multivote Tournament', () => {
     // total_votes defaults to null (auto = options * 2 = 6)
     const { tournament } = await setupActiveMultivoteTournament(
       request, 'Multivote Flow', ['Ruby', 'Emerald', 'Sapphire'],
-      { voter_count: 1 },
+      { voter_labels: ['default'] },
     );
 
     // Navigate to the vote page
@@ -61,7 +61,7 @@ test.describe('Multivote Tournament', () => {
     // Click Submit
     await submitButton.click();
 
-    // With voter_count=1, tournament should complete
+    // With single voter, tournament should complete
     await expect(page.getByText('Winner')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Full Ranking')).toBeVisible();
   });
@@ -70,17 +70,17 @@ test.describe('Multivote Tournament', () => {
     // Setup and complete a multivote tournament via API
     const { tournament } = await setupActiveMultivoteTournament(
       request, 'Multivote Result', ['Gold', 'Silver', 'Bronze'],
-      { voter_count: 1 },
+      { voter_labels: ['default'] },
     );
 
     // Get vote context to learn entry IDs and total_votes
-    const ctx = await getVoteContext(request, tournament.id, 'Voter 1');
+    const ctx = await getVoteContext(request, tournament.id, 'default');
     const entryIds = ctx.entries.map((e: any) => e.id);
 
     // The auto total_votes = 3 * 2 = 6
     // Submit vote: give all votes to the first entry
     await submitVote(
-      request, tournament.id, tournament.version, 'Voter 1',
+      request, tournament.id, tournament.version, 'default',
       {
         allocations: [
           { entry_id: entryIds[0], votes: 4 },
@@ -108,7 +108,7 @@ test.describe('Multivote Tournament', () => {
     // Setup a multivote tournament
     const { tournament } = await setupActiveMultivoteTournament(
       request, 'Budget Validation', ['X', 'Y', 'Z'],
-      { voter_count: 1 },
+      { voter_labels: ['default'] },
     );
 
     await page.goto(`/tournaments/${tournament.id}/vote`);

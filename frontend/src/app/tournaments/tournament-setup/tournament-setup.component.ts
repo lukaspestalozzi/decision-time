@@ -1,7 +1,9 @@
 import { afterNextRender, Component, computed, inject, Injector, signal, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { ENTER, COMMA } from '@angular/cdk/keycodes';
 import { STEPPER_GLOBAL_OPTIONS } from '@angular/cdk/stepper';
+import { MatChipInputEvent } from '@angular/material/chips';
 import { MatStepper, MatStepperModule } from '@angular/material/stepper';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -101,15 +103,40 @@ export class TournamentSetupComponent {
   // Score config
   minScore = signal(1);
   maxScore = signal(5);
-  scoreVoterCount = signal(1);
+  scoreVoterLabels = signal<string[]>(['Voter 1']);
 
   // Multivote config
   totalVotes = signal<number | null>(null);
   maxPerOption = signal<number | null>(null);
-  multivoteVoterCount = signal(1);
+  multivoteVoterLabels = signal<string[]>(['Voter 1']);
 
   // Condorcet config
-  condorcetVoterCount = signal(1);
+  condorcetVoterLabels = signal<string[]>(['Voter 1']);
+
+  // Voter chip input separators
+  readonly voterSeparatorKeyCodes = [ENTER, COMMA] as const;
+
+  addVoterLabel(target: 'score' | 'multivote' | 'condorcet', event: MatChipInputEvent): void {
+    const value = (event.value ?? '').trim();
+    event.chipInput.clear();
+    if (!value) return;
+    const signal = this._voterSignal(target);
+    if (signal().includes(value)) return;
+    signal.update((labels) => [...labels, value]);
+  }
+
+  removeVoterLabel(target: 'score' | 'multivote' | 'condorcet', label: string): void {
+    const signal = this._voterSignal(target);
+    signal.update((labels) => labels.filter((l) => l !== label));
+  }
+
+  private _voterSignal(target: 'score' | 'multivote' | 'condorcet') {
+    switch (target) {
+      case 'score': return this.scoreVoterLabels;
+      case 'multivote': return this.multivoteVoterLabels;
+      case 'condorcet': return this.condorcetVoterLabels;
+    }
+  }
 
   // --- Step 4: Activate ---
   activating = signal(false);
@@ -180,19 +207,19 @@ export class TournamentSetupComponent {
       case 'score':
         entries.push(
           { label: 'Score Range', value: `${this.minScore()} - ${this.maxScore()}` },
-          { label: 'Voter Count', value: `${this.scoreVoterCount()}` },
+          { label: 'Voters', value: this.scoreVoterLabels().join(', ') },
         );
         break;
       case 'multivote':
         entries.push(
           { label: 'Total Votes', value: this.totalVotes() !== null ? `${this.totalVotes()}` : 'Auto' },
           { label: 'Max Per Option', value: this.maxPerOption() !== null ? `${this.maxPerOption()}` : 'Unlimited' },
-          { label: 'Voter Count', value: `${this.multivoteVoterCount()}` },
+          { label: 'Voters', value: this.multivoteVoterLabels().join(', ') },
         );
         break;
       case 'condorcet':
         entries.push(
-          { label: 'Voter Count', value: `${this.condorcetVoterCount()}` },
+          { label: 'Voters', value: this.condorcetVoterLabels().join(', ') },
         );
         break;
     }
@@ -317,17 +344,17 @@ export class TournamentSetupComponent {
         return {
           min_score: this.minScore(),
           max_score: this.maxScore(),
-          voter_count: this.scoreVoterCount(),
+          voter_labels: this.scoreVoterLabels(),
         };
       case 'multivote':
         return {
           total_votes: this.totalVotes(),
           max_per_option: this.maxPerOption(),
-          voter_count: this.multivoteVoterCount(),
+          voter_labels: this.multivoteVoterLabels(),
         };
       case 'condorcet':
         return {
-          voter_count: this.condorcetVoterCount(),
+          voter_labels: this.condorcetVoterLabels(),
         };
       default:
         return {};
