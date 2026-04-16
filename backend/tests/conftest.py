@@ -51,21 +51,14 @@ def sample_tournament() -> Tournament:
 
 @pytest.fixture
 def client(data_dir: Path) -> Generator[TestClient, None, None]:
-    """TestClient with dependency overrides pointing to tmp data dir.
-
-    Uses a 0-second undo cool-off so tournaments finalize immediately on the
-    last vote — matching pre-cool-off behavior for existing flow tests.
-    API tests that exercise cool-off behavior override this.
-    """
+    """TestClient with dependency overrides pointing to tmp data dir."""
     from app.main import app
 
     option_repo = OptionRepository(data_dir)
     tournament_repo = TournamentRepository(data_dir)
 
     app.dependency_overrides[get_option_service] = lambda: OptionService(option_repo)
-    app.dependency_overrides[get_tournament_service] = lambda: TournamentService(
-        tournament_repo, option_repo, cool_off_seconds=0
-    )
+    app.dependency_overrides[get_tournament_service] = lambda: TournamentService(tournament_repo, option_repo)
 
     with TestClient(app) as c:
         yield c

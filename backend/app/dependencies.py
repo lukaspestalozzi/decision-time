@@ -17,5 +17,4 @@ def get_tournament_service() -> TournamentService:
     return TournamentService(
         TournamentRepository(_config.data_dir),
         OptionRepository(_config.data_dir),
-        cool_off_seconds=_config.undo_cool_off_seconds,
     )

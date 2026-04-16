@@ -1,6 +1,6 @@
 """Tournament service — lifecycle orchestration between repos and engines."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -15,8 +15,6 @@ from app.repositories.tournaments import TournamentRepository
 from app.schemas.common import TournamentMode, TournamentStatus, get_default_config, normalize_config
 from app.schemas.tournament import Result, Tournament, TournamentEntry, Vote, VoteStatus
 
-DEFAULT_COOL_OFF_SECONDS = 30
-
 
 class TournamentService:
     """Orchestrates tournament lifecycle: creation, activation, voting, completion."""
@@ -25,11 +23,9 @@ class TournamentService:
         self,
         tournament_repo: TournamentRepository,
         option_repo: OptionRepository,
-        cool_off_seconds: float = DEFAULT_COOL_OFF_SECONDS,
     ) -> None:
         self._repo = tournament_repo
         self._option_repo = option_repo
-        self._cool_off_seconds = cool_off_seconds
 
     def _get_engine(self, mode: TournamentMode) -> TournamentEngine:
         engines: dict[TournamentMode, TournamentEngine] = {
@@ -47,27 +43,7 @@ class TournamentService:
         return self._repo.list_all(status=status)
 
     def get_tournament(self, tournament_id: UUID) -> Tournament:
-        tournament = self._repo.get(tournament_id)
-        if self._finalize_if_cool_off_expired(tournament):
-            return self._repo.save(tournament, expected_version=tournament.version)
-        return tournament
-
-    def _finalize_if_cool_off_expired(self, tournament: Tournament) -> bool:
-        """Mutate `tournament` to COMPLETED if cool-off has expired.
-
-        Returns True if the tournament was finalized (caller should persist),
-        False otherwise. Pure — does no I/O.
-        """
-        if tournament.cool_off_ends_at is None:
-            return False
-        if datetime.now(UTC) < tournament.cool_off_ends_at:
-            return False
-        engine = self._get_engine(tournament.mode)
-        tournament.status = TournamentStatus.COMPLETED
-        tournament.completed_at = datetime.now(UTC)
-        tournament.cool_off_ends_at = None
-        tournament.result = engine.compute_result(tournament.state, tournament.entries)
-        return True
+        return self._repo.get(tournament_id)
 
     def create_tournament(self, name: str, mode: TournamentMode, description: str = "") -> Tournament:
         tournament = Tournament(
@@ -185,14 +161,11 @@ class TournamentService:
         tournament.votes.append(vote)
         tournament.state = new_state
 
-        # When the last required vote arrives, start the cool-off window instead of
-        # completing immediately. Voters get a 30s (configurable) grace period to
-        # edit/undo before the result is final. Completion is lazy — happens on
-        # the next get_tournament() after the window expires. When cool_off_seconds
-        # is 0 (e.g., in tests) we finalize immediately in the same call.
+        # When the last required vote arrives, finalize immediately.
         if engine.is_complete(new_state):
-            tournament.cool_off_ends_at = datetime.now(UTC) + timedelta(seconds=self._cool_off_seconds)
-            self._finalize_if_cool_off_expired(tournament)
+            tournament.status = TournamentStatus.COMPLETED
+            tournament.completed_at = datetime.now(UTC)
+            tournament.result = engine.compute_result(new_state, tournament.entries)
 
         return self._repo.save(tournament, expected_version=version)
 
@@ -229,9 +202,6 @@ class TournamentService:
         engine = self._get_engine(tournament.mode)
         active_votes = [v for v in tournament.votes if v.status == VoteStatus.ACTIVE]
         tournament.state = engine.replay_state(tournament.entries, tournament.config, active_votes)
-
-        # Undo always cancels any pending cool-off — we're back to active voting
-        tournament.cool_off_ends_at = None
 
         return self._repo.save(tournament, expected_version=version)
 

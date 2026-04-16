@@ -1,25 +1,13 @@
-"""Tests for TournamentService.undo_vote and the cool-off lazy transition."""
-
-import time
-from datetime import UTC, datetime, timedelta
+"""Tests for TournamentService.undo_vote."""
 
 import pytest
 
 from app.exceptions import ConflictError, InvalidStateError, ValidationError
 from app.repositories.options import OptionRepository
-from app.repositories.tournaments import TournamentRepository
 from app.schemas.common import TournamentMode, TournamentStatus
 from app.schemas.option import Option
 from app.schemas.tournament import Tournament, VoteStatus
 from app.services.tournament_service import TournamentService
-
-SHORT_COOL_OFF = 0.05  # 50ms — small enough to sleep past, large enough to be non-zero
-
-
-@pytest.fixture
-def short_cool_off_service(tournament_repo: TournamentRepository, option_repo: OptionRepository) -> TournamentService:
-    """TournamentService with a very short cool-off so lazy-finalization can be exercised."""
-    return TournamentService(tournament_repo, option_repo, cool_off_seconds=SHORT_COOL_OFF)
 
 
 def _create_score_options(option_repo: OptionRepository, names: list[str]) -> list[Option]:
@@ -195,92 +183,25 @@ class TestUndoVoteContextAfterUndo:
         assert ctx.type == "ballot"
 
 
-class TestCoolOff:
-    def test_last_vote_sets_cool_off_and_stays_active(
+class TestUndoOnCompletedTournament:
+    def test_last_vote_completes_tournament_immediately(
         self, tournament_service: TournamentService, option_repo: OptionRepository
     ) -> None:
-        """Default service has a 30s cool-off; tournament should stay active with cool_off_ends_at set."""
         t = _create_active_score(tournament_service, option_repo, ["Alice", "Bob"])
         t = tournament_service.submit_vote(t.id, t.version, "Alice", _score_payload(t, [5, 3, 1]))
-        # Last vote — would normally complete the tournament
+        assert t.status == TournamentStatus.ACTIVE
+
         t = tournament_service.submit_vote(t.id, t.version, "Bob", _score_payload(t, [1, 3, 5]))
-
-        assert t.status == TournamentStatus.ACTIVE
-        assert t.cool_off_ends_at is not None
-        assert t.cool_off_ends_at > datetime.now(UTC)
-
-    def test_get_tournament_before_cool_off_expires_stays_active(
-        self, tournament_service: TournamentService, option_repo: OptionRepository
-    ) -> None:
-        t = _create_active_score(tournament_service, option_repo, ["Alice"])
-        t = tournament_service.submit_vote(t.id, t.version, "Alice", _score_payload(t, [5, 3, 1]))
-        assert t.status == TournamentStatus.ACTIVE
-        # Immediate re-fetch — still active
-        fetched = tournament_service.get_tournament(t.id)
-        assert fetched.status == TournamentStatus.ACTIVE
-        assert fetched.cool_off_ends_at is not None
-
-    def test_get_tournament_after_cool_off_completes(
-        self,
-        short_cool_off_service: TournamentService,
-        option_repo: OptionRepository,
-    ) -> None:
-        """After the cool-off window expires, the next get_tournament transitions to completed."""
-        t = _create_active_score(short_cool_off_service, option_repo, ["Alice"])
-        t = short_cool_off_service.submit_vote(t.id, t.version, "Alice", _score_payload(t, [5, 3, 1]))
-        # Immediately after submit: still active, cool-off window set
-        assert t.status == TournamentStatus.ACTIVE
-        assert t.cool_off_ends_at is not None
-
-        # Sleep slightly longer than the cool-off window, then fetch — finalization should fire
-        time.sleep(SHORT_COOL_OFF * 2)
-
-        fetched = short_cool_off_service.get_tournament(t.id)
-        assert fetched.status == TournamentStatus.COMPLETED
-        assert fetched.cool_off_ends_at is None
-        assert fetched.completed_at is not None
-        assert fetched.result is not None
-
-    def test_undo_during_cool_off_clears_cool_off(
-        self, tournament_service: TournamentService, option_repo: OptionRepository
-    ) -> None:
-        t = _create_active_score(tournament_service, option_repo, ["Alice"])
-        t = tournament_service.submit_vote(t.id, t.version, "Alice", _score_payload(t, [5, 3, 1]))
-        assert t.cool_off_ends_at is not None
-
-        t = tournament_service.undo_vote(t.id, t.version, "Alice")
-        assert t.cool_off_ends_at is None
-        assert t.status == TournamentStatus.ACTIVE
-
-    def test_cool_off_duration_is_configurable(
-        self, tournament_repo: TournamentRepository, option_repo: OptionRepository
-    ) -> None:
-        svc = TournamentService(tournament_repo, option_repo, cool_off_seconds=60)
-        t = _create_active_score(svc, option_repo, ["Alice"])
-        t = svc.submit_vote(t.id, t.version, "Alice", _score_payload(t, [5, 3, 1]))
-        delta = t.cool_off_ends_at - datetime.now(UTC)
-        # Should be close to 60 seconds, allow 5 seconds slack for test scheduling
-        assert timedelta(seconds=55) <= delta <= timedelta(seconds=60)
-
-    def test_non_final_vote_does_not_set_cool_off(
-        self, tournament_service: TournamentService, option_repo: OptionRepository
-    ) -> None:
-        t = _create_active_score(tournament_service, option_repo, ["Alice", "Bob"])
-        t = tournament_service.submit_vote(t.id, t.version, "Alice", _score_payload(t, [5, 3, 1]))
-        assert t.cool_off_ends_at is None
-        assert t.status == TournamentStatus.ACTIVE
+        assert t.status == TournamentStatus.COMPLETED
+        assert t.completed_at is not None
+        assert t.result is not None
 
     def test_undo_on_completed_tournament_raises(
-        self,
-        short_cool_off_service: TournamentService,
-        option_repo: OptionRepository,
+        self, tournament_service: TournamentService, option_repo: OptionRepository
     ) -> None:
-        """Per UX decision: no undo after tournament transitions to completed."""
-        t = _create_active_score(short_cool_off_service, option_repo, ["Alice"])
-        t = short_cool_off_service.submit_vote(t.id, t.version, "Alice", _score_payload(t, [5, 3, 1]))
-        time.sleep(SHORT_COOL_OFF * 2)
-        t = short_cool_off_service.get_tournament(t.id)
+        t = _create_active_score(tournament_service, option_repo, ["Alice"])
+        t = tournament_service.submit_vote(t.id, t.version, "Alice", _score_payload(t, [5, 3, 1]))
         assert t.status == TournamentStatus.COMPLETED
 
         with pytest.raises(InvalidStateError):
-            short_cool_off_service.undo_vote(t.id, t.version, "Alice")
+            tournament_service.undo_vote(t.id, t.version, "Alice")

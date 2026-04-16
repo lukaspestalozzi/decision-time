@@ -49,5 +49,4 @@ export interface Tournament {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
-  cool_off_ends_at: string | null;
 }

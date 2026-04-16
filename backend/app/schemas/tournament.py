@@ -73,7 +73,6 @@ class Tournament(DecisionTimeModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
-    cool_off_ends_at: datetime | None = None
 
     @field_validator("name")
     @classmethod

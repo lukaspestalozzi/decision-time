@@ -2,10 +2,10 @@
 
 # Development
 dev-backend:
-	cd backend && DATA_DIR=./data uv run uvicorn app.main:app --reload --port 8009
+	cd backend && DATA_DIR=./data uv run uvicorn app.main:app --reload --port 8010
 
 dev-frontend:
-	cd frontend && npx ng serve --proxy-config proxy.conf.json
+	cd frontend && npx ng serve --proxy-config proxy.conf.json --port 8009
 
 dev:
 	$(MAKE) dev-backend & $(MAKE) dev-frontend & wait

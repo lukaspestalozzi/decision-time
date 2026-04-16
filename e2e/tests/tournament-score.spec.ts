@@ -175,7 +175,7 @@ test.describe('Score Tournament', () => {
   });
 
   test('edit ballot after submitting', async ({ page, request }) => {
-    // 3-voter score tournament so submitting doesn't enter cool-off
+    // 3-voter score tournament so submitting doesn't complete the tournament
     const { tournament } = await setupActiveScoreTournament(
       request, 'Edit Ballot Test', ['Alpha', 'Bravo', 'Charlie'],
       { min_score: 1, max_score: 5, voter_labels: ['Alice', 'Bob', 'Carol'] },

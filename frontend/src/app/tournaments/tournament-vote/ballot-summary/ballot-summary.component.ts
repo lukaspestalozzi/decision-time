@@ -1,4 +1,4 @@
-import { Component, computed, input, output, signal, OnDestroy } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,8 +8,7 @@ import { Tournament, Vote } from '../../../models/tournament.model';
  * Displayed to a voter after they submit a ballot (Score/Multivote modes).
  *
  * Shows a read-only summary of their submitted scores/allocations, an overall
- * submission progress count, an optional cool-off countdown when the tournament
- * is about to finalize, and an "Edit my ballot" action.
+ * submission progress count, and an "Edit my ballot" action.
  */
 @Component({
   selector: 'app-ballot-summary',
@@ -17,22 +16,10 @@ import { Tournament, Vote } from '../../../models/tournament.model';
   templateUrl: './ballot-summary.component.html',
   styleUrl: './ballot-summary.component.scss',
 })
-export class BallotSummaryComponent implements OnDestroy {
+export class BallotSummaryComponent {
   tournament = input.required<Tournament>();
   voterLabel = input.required<string>();
   editClicked = output<void>();
-
-  private tickHandle: ReturnType<typeof setInterval> | null = null;
-  private nowMs = signal(Date.now());
-
-  constructor() {
-    // Update the countdown every second when a cool-off is pending.
-    this.tickHandle = setInterval(() => this.nowMs.set(Date.now()), 1000);
-  }
-
-  ngOnDestroy(): void {
-    if (this.tickHandle) clearInterval(this.tickHandle);
-  }
 
   /** Find this voter's most recent active vote. */
   myVote = computed<Vote | null>(() => {
@@ -81,14 +68,6 @@ export class BallotSummaryComponent implements OnDestroy {
   ballotsRequired = computed<number>(() => {
     const labels = this.tournament().config['voter_labels'];
     return Array.isArray(labels) ? labels.length : 1;
-  });
-
-  /** Seconds remaining until cool-off expires, or null when no cool-off is active. */
-  secondsUntilFinalize = computed<number | null>(() => {
-    const endsAt = this.tournament().cool_off_ends_at;
-    if (!endsAt) return null;
-    const remaining = Math.ceil((new Date(endsAt).getTime() - this.nowMs()) / 1000);
-    return remaining > 0 ? remaining : 0;
   });
 
   /** True if the tournament owner allows voters to edit. */

@@ -1,4 +1,4 @@
-"""Tests for Vote status, Tournament.cool_off_ends_at, and config.allow_undo additions."""
+"""Tests for Vote status and config.allow_undo additions."""
 
 from datetime import UTC, datetime
 
@@ -9,7 +9,7 @@ from app.schemas.common import (
     ScoreConfig,
     TournamentConfig,
 )
-from app.schemas.tournament import Tournament, Vote, VoteStatus
+from app.schemas.tournament import Vote, VoteStatus
 
 
 class TestVoteStatus:
@@ -42,26 +42,6 @@ class TestVoteStatus:
         vote = Vote(voter_label="Alice", payload={})
         dumped = vote.model_dump(mode="json")
         assert dumped["status"] == "active"
-
-
-class TestTournamentCoolOff:
-    def test_default_cool_off_ends_at_is_none(self) -> None:
-        t = Tournament(name="t", mode="score")
-        assert t.cool_off_ends_at is None
-
-    def test_cool_off_ends_at_serializes_as_iso_utc(self) -> None:
-        t = Tournament(
-            name="t",
-            mode="score",
-            cool_off_ends_at=datetime(2026, 4, 15, 12, 0, 0, tzinfo=UTC),
-        )
-        dumped = t.model_dump(mode="json")
-        assert dumped["cool_off_ends_at"] == "2026-04-15T12:00:00Z"
-
-    def test_legacy_tournament_json_without_cool_off_deserializes(self) -> None:
-        legacy = {"name": "t", "mode": "score"}
-        t = Tournament.model_validate(legacy)
-        assert t.cool_off_ends_at is None
 
 
 class TestAllowUndoConfig:

@@ -101,6 +101,15 @@
                 </mat-chip-set>
               }
 
+              @if (filteredOptions().length > 0) {
+                <button mat-stroked-button
+                        (click)="selectAllFiltered()"
+                        class="select-all-btn">
+                  <mat-icon>done_all</mat-icon>
+                  Select all ({{ filteredOptions().length }})
+                </button>
+              }
+
               <div class="option-list">
                 @for (opt of filteredOptions(); track opt.id) {
                   <mat-card class="option-item"

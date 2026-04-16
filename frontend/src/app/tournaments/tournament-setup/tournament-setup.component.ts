@@ -305,6 +305,14 @@ export class TournamentSetupComponent {
     this.selectedTag.set(this.selectedTag() === tag ? null : tag);
   }
 
+  selectAllFiltered(): void {
+    const current = new Set(this.selectedOptionIds());
+    for (const opt of this.filteredOptions()) {
+      current.add(opt.id);
+    }
+    this.selectedOptionIds.set(current);
+  }
+
   saveSelectedOptions(): void {
     const t = this.tournament();
     if (!t || !this.step2Valid() || this.savingOptions()) return;

@@ -14,13 +14,7 @@
   </div>
 
   <div class="progress">
-    @if (secondsUntilFinalize() !== null) {
-      <p class="finalizing">
-        All ballots submitted. Tournament will finalize in {{ secondsUntilFinalize() }}s.
-      </p>
-    } @else {
-      <p>{{ ballotsSubmitted() }} of {{ ballotsRequired() }} voters have submitted</p>
-    }
+    <p>{{ ballotsSubmitted() }} of {{ ballotsRequired() }} voters have submitted</p>
   </div>
 
   @if (canEdit()) {

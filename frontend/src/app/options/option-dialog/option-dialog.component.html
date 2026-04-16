@@ -35,8 +35,16 @@
       <input [matChipInputFor]="chipGrid"
              [matChipInputSeparatorKeyCodes]="separatorKeyCodes"
              (matChipInputTokenEnd)="addTag($event)"
+             [matAutocomplete]="tagAuto"
+             [ngModel]="tagInput()"
+             (ngModelChange)="tagInput.set($event)"
              placeholder="Add tag...">
     </mat-chip-grid>
+    <mat-autocomplete #tagAuto="matAutocomplete" (optionSelected)="selectTag($event)">
+      @for (tag of filteredTags(); track tag) {
+        <mat-option [value]="tag">{{ tag }}</mat-option>
+      }
+    </mat-autocomplete>
     <mat-hint>Press Enter or comma to add a tag</mat-hint>
   </mat-form-field>
 </mat-dialog-content>

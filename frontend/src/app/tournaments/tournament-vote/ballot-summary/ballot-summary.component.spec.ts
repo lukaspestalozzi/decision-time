@@ -24,7 +24,6 @@ function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
     created_at: '',
     updated_at: '',
     completed_at: null,
-    cool_off_ends_at: null,
     ...overrides,
   };
 }
@@ -103,7 +102,7 @@ describe('BallotSummaryComponent', () => {
     expect(rows[1].textContent).toContain('1 vote');
   });
 
-  it('shows ballot progress when no cool-off is active', () => {
+  it('shows ballot progress', () => {
     const t = makeTournament({
       votes: [
         {
@@ -123,30 +122,6 @@ describe('BallotSummaryComponent', () => {
 
     const progress = fixture.nativeElement.querySelector('.progress').textContent;
     expect(progress).toContain('1 of 2 voters have submitted');
-  });
-
-  it('shows cool-off countdown when cool_off_ends_at is in the future', () => {
-    const futureIso = new Date(Date.now() + 27_000).toISOString();
-    const t = makeTournament({
-      cool_off_ends_at: futureIso,
-      votes: [
-        {
-          id: 'v1',
-          voter_label: 'Alice',
-          round: null,
-          submitted_at: '2026-04-15T10:00:00Z',
-          payload: { scores: [{ entry_id: 'e1', score: 5 }, { entry_id: 'e2', score: 2 }] },
-          status: 'active',
-          superseded_at: null,
-        },
-      ],
-    });
-    ref.setInput('tournament', t);
-    ref.setInput('voterLabel', 'Alice');
-    fixture.detectChanges();
-
-    const progress = fixture.nativeElement.querySelector('.progress').textContent;
-    expect(progress).toMatch(/finalize in \d+s/i);
   });
 
   it('emits editClicked when the button is pressed', () => {

@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   MAT_DIALOG_DATA,
@@ -10,8 +10,10 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule, MatChipInputEvent } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
+import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { COMMA, ENTER } from '@angular/cdk/keycodes';
 import { Option } from '../../models/option.model';
+import { ApiService } from '../../services/api.service';
 
 export interface OptionDialogData {
   option?: Option;
@@ -33,12 +35,14 @@ export interface OptionDialogResult {
     MatButtonModule,
     MatChipsModule,
     MatIconModule,
+    MatAutocompleteModule,
   ],
   templateUrl: './option-dialog.component.html',
   styleUrl: './option-dialog.component.scss',
 })
 export class OptionDialogComponent {
   private dialogRef = inject(MatDialogRef<OptionDialogComponent>);
+  private api = inject(ApiService);
   private data: OptionDialogData = inject(MAT_DIALOG_DATA, { optional: true }) ?? {};
 
   readonly separatorKeyCodes = [ENTER, COMMA] as const;
@@ -47,6 +51,14 @@ export class OptionDialogComponent {
   name = signal('');
   description = signal('');
   tags = signal<string[]>([]);
+  allTags = signal<string[]>([]);
+  tagInput = signal('');
+
+  filteredTags = computed(() => {
+    const input = this.tagInput().toLowerCase();
+    const current = this.tags();
+    return this.allTags().filter(t => !current.includes(t) && t.toLowerCase().includes(input));
+  });
 
   constructor() {
     if (this.data.option) {
@@ -55,6 +67,10 @@ export class OptionDialogComponent {
       this.description.set(this.data.option.description ?? '');
       this.tags.set([...this.data.option.tags]);
     }
+    this.api.listTags().subscribe({
+      next: (tags) => this.allTags.set(tags),
+      error: () => { /* tags are optional, ignore errors */ },
+    });
   }
 
   get title(): string {
@@ -71,6 +87,15 @@ export class OptionDialogComponent {
       this.tags.update((tags) => [...tags, value]);
     }
     event.chipInput.clear();
+    this.tagInput.set('');
+  }
+
+  selectTag(event: MatAutocompleteSelectedEvent): void {
+    const value = event.option.viewValue;
+    if (value && !this.tags().includes(value)) {
+      this.tags.update((tags) => [...tags, value]);
+    }
+    this.tagInput.set('');
   }
 
   removeTag(tag: string): void {

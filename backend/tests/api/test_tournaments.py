@@ -498,7 +498,7 @@ class TestUndoEndpoint:
         assert resp.status_code == 422
 
     def test_undo_on_completed_returns_409(self, client: TestClient) -> None:
-        """With test client's 0-second cool-off, single-voter submit completes immediately."""
+        """Single-voter submit completes immediately; undo should be rejected."""
         options = _create_options(client, 3)
         create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "score"})
         tid = create.json()["id"]
@@ -553,64 +553,3 @@ class TestUndoEndpoint:
         )
         tournament = resp.json()["tournament"]
         assert tournament["status"] == "active"
-        assert tournament["cool_off_ends_at"] is None
-
-
-class TestCoolOffAPI:
-    """Verify that cool_off_ends_at appears in tournament responses during cool-off."""
-
-    def test_cool_off_ends_at_exposed_in_response(self) -> None:
-        """Use a dedicated client with non-zero cool-off to observe the field."""
-        # Use a tmp data dir via pytest's tmp_path by constructing manually
-        import tempfile
-        from pathlib import Path
-
-        from fastapi.testclient import TestClient
-
-        from app.dependencies import get_option_service, get_tournament_service
-        from app.main import app
-        from app.repositories.options import OptionRepository
-        from app.repositories.tournaments import TournamentRepository
-        from app.services.option_service import OptionService
-        from app.services.tournament_service import TournamentService
-
-        with tempfile.TemporaryDirectory() as tmp:
-            data = Path(tmp)
-            option_repo = OptionRepository(data)
-            tournament_repo = TournamentRepository(data)
-            app.dependency_overrides[get_option_service] = lambda: OptionService(option_repo)
-            app.dependency_overrides[get_tournament_service] = lambda: TournamentService(
-                tournament_repo, option_repo, cool_off_seconds=60
-            )
-            try:
-                client = TestClient(app)
-                options = _create_options(client, 3)
-                create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "score"})
-                tid = create.json()["id"]
-                v = create.json()["version"]
-                upd = client.put(
-                    f"/api/v1/tournaments/{tid}",
-                    json={
-                        "version": v,
-                        "selected_option_ids": [o["id"] for o in options],
-                        "config": {"voter_labels": ["Alice"]},
-                    },
-                )
-                v = upd.json()["version"]
-                v = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": v}).json()["version"]
-                # Submit the only vote — this should enter cool-off (not complete)
-                t = client.get(f"/api/v1/tournaments/{tid}").json()
-                eids = [e["id"] for e in t["entries"]]
-                resp = client.post(
-                    f"/api/v1/tournaments/{tid}/vote",
-                    json={
-                        "version": v,
-                        "voter_label": "Alice",
-                        "payload": {"scores": [{"entry_id": e, "score": 3} for e in eids]},
-                    },
-                )
-                body = resp.json()
-                assert body["status"] == "active"
-                assert body["cool_off_ends_at"] is not None
-            finally:
-                app.dependency_overrides.clear()

@@ -51,7 +51,6 @@ class DecisionTimeModel(BaseModel):
         "completed_at",
         "submitted_at",
         "computed_at",
-        "cool_off_ends_at",
         "superseded_at",
         check_fields=False,
     )
