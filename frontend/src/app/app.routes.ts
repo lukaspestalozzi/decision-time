@@ -5,6 +5,7 @@ import { TournamentSetupComponent } from './tournaments/tournament-setup/tournam
 import { TournamentOverviewComponent } from './tournaments/tournament-overview/tournament-overview.component';
 import { TournamentVoteComponent } from './tournaments/tournament-vote/tournament-vote.component';
 import { TournamentResultComponent } from './tournaments/tournament-result/tournament-result.component';
+import { RandomPageComponent } from './random/random-page/random-page.component';
 
 export const routes: Routes = [
   { path: '', component: DashboardComponent },
@@ -14,4 +15,5 @@ export const routes: Routes = [
   { path: 'tournaments/:id', component: TournamentOverviewComponent },
   { path: 'tournaments/:id/vote', component: TournamentVoteComponent },
   { path: 'tournaments/:id/result', component: TournamentResultComponent },
+  { path: 'random', component: RandomPageComponent },
 ];

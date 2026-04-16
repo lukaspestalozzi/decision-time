@@ -746,6 +746,7 @@ Used for Docker `HEALTHCHECK` and uptime monitoring. Prometheus-style metrics ma
 | `/tournaments/:id`        | Tournament Overview | Status, config summary, links to vote/result |
 | `/tournaments/:id/vote`   | Voting UI           | `?voter=Voter+2` pre-selects slot            |
 | `/tournaments/:id/result` | Results             | Winner, ranking, visualizations              |
+| `/random`                 | Quick Pick          | Random decision from existing options        |
 
 ### 5.2 Pages
 
@@ -760,6 +761,10 @@ Used for Docker `HEALTHCHECK` and uptime monitoring. Prometheus-style metrics ma
   Dispatches on `VoteContext.type`. Voter selection dropdown for multi-ballot modes (pre-selectable via query param).
 - **Tournament Result**: Winner announcement (handles ties), full ranking, mode-specific visualizations (bracket tree,
   pairwise matrix, score chart).
+- **Quick Pick**: Random decision-maker. User selects from their existing option pool (same search/filter/tag UI as
+  tournament setup), then triggers a cycling highlight animation that decelerates over ~3–4 seconds before revealing a
+  random winner. Purely frontend — no tournament is created, no data is persisted. Fun, lightweight alternative to a
+  full tournament.
 
 ### 5.3 Key UI Components
 
@@ -772,6 +777,8 @@ Used for Docker `HEALTHCHECK` and uptime monitoring. Prometheus-style metrics ma
 - `PairwiseMatrix` — visualization of Condorcet pairwise results and Schulze path strengths.
 - `ResultChart` — visualization of final rankings (bar chart, bracket tree, pairwise matrix, etc.).
 - `VoterSelector` — dropdown to pick voter slot, grays out submitted voters. Hidden for Bracket mode.
+- `DecisionSpinner` — cycling highlight animation widget for Quick Pick. Rapidly highlights options in sequence with
+  exponential deceleration, landing on a pre-chosen random winner. Respects `prefers-reduced-motion`.
 
 ---
 
@@ -1183,6 +1190,9 @@ Preserved for traceability.
     confirm button. ✅
 70. **Dev server port alignment**: Frontend dev server runs on port 8009 (same as production), backend on 8010
     internally. Proxy handles API routing. ✅
+71. **Quick Pick feature**: Frontend-only random decision page at `/random`. Uses existing options from the API with the
+    same selection UI as tournament setup. Cycling highlight animation with deceleration for tension. No backend
+    changes. No data persistence. ✅
 
 ---
 

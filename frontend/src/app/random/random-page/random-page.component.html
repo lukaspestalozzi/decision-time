@@ -1,0 +1,135 @@
+<div class="random-container">
+  <h1>Quick Pick</h1>
+  <p class="subtitle">Can't decide? Let fate choose for you.</p>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading options...</p>
+    </div>
+  } @else if (!hasEnoughOptions()) {
+    <div class="empty-state">
+      <mat-icon class="empty-icon">casino</mat-icon>
+      <h2>Not enough options</h2>
+      <p>You need at least 2 options to make a random pick.</p>
+      <a mat-flat-button color="primary" routerLink="/options">Go to Options</a>
+    </div>
+  } @else {
+    @switch (phase()) {
+      @case ('setup') {
+        <div class="options-layout">
+          <div class="options-available">
+            <h3>Choose your options</h3>
+
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Search options</mat-label>
+              <input matInput
+                     [value]="searchQuery()"
+                     (input)="onSearchInput($event)"
+                     placeholder="Filter by name or tag">
+              <mat-icon matSuffix>search</mat-icon>
+            </mat-form-field>
+
+            @if (allTags().length > 0) {
+              <mat-chip-set class="tag-filter">
+                @for (tag of allTags(); track tag) {
+                  <mat-chip [highlighted]="selectedTag() === tag"
+                            (click)="toggleTag(tag)">
+                    {{ tag }}
+                  </mat-chip>
+                }
+              </mat-chip-set>
+            }
+
+            @if (filteredOptions().length > 0) {
+              <button mat-stroked-button
+                      (click)="selectAllFiltered()"
+                      class="select-all-btn">
+                <mat-icon>done_all</mat-icon>
+                Select all ({{ filteredOptions().length }})
+              </button>
+            }
+
+            <div class="option-list">
+              @for (opt of filteredOptions(); track opt.id) {
+                <mat-card class="option-item"
+                          [class.option-selected]="isSelected(opt.id)"
+                          (click)="toggleOption(opt.id)"
+                          appearance="outlined">
+                  <mat-card-content class="option-item-content">
+                    <div class="option-info">
+                      <span class="option-name">{{ opt.name }}</span>
+                      @if (opt.tags.length > 0) {
+                        <span class="option-tags">
+                          @for (tag of opt.tags; track tag) {
+                            <span class="tag-chip">{{ tag }}</span>
+                          }
+                        </span>
+                      }
+                    </div>
+                    <mat-icon class="select-icon">
+                      {{ isSelected(opt.id) ? 'check_circle' : 'radio_button_unchecked' }}
+                    </mat-icon>
+                  </mat-card-content>
+                </mat-card>
+              }
+            </div>
+          </div>
+
+          <div class="options-selected">
+            <h3>Selected ({{ selectedOptionIds().size }})</h3>
+            @if (selectedOptionIds().size < 2) {
+              <p class="validation-hint">Select at least 2 options.</p>
+            }
+            <div class="selected-list">
+              @for (opt of selectedOptions(); track opt.id) {
+                <div class="selected-item">
+                  <span>{{ opt.name }}</span>
+                  <button mat-icon-button (click)="removeOption(opt.id)" aria-label="Remove option">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+              } @empty {
+                <p class="empty-text">No options selected yet.</p>
+              }
+            </div>
+
+            <button mat-flat-button
+                    color="primary"
+                    class="decide-btn"
+                    [disabled]="!isValid()"
+                    (click)="decide()">
+              <mat-icon>casino</mat-icon>
+              Decide for me!
+            </button>
+          </div>
+        </div>
+      }
+
+      @case ('spinning') {
+        <app-decision-spinner
+          [options]="selectedOptions()"
+          (winnerSelected)="onWinnerSelected($event)" />
+      }
+
+      @case ('result') {
+        <div class="result-container">
+          <mat-icon class="trophy">emoji_events</mat-icon>
+          <h2>The answer is...</h2>
+          <span class="winner-name">{{ winner()?.name }}</span>
+
+          <div class="result-actions">
+            <button mat-stroked-button (click)="spinAgain()">
+              <mat-icon>replay</mat-icon>
+              Spin again
+            </button>
+            <button mat-button (click)="newRound()">
+              <mat-icon>restart_alt</mat-icon>
+              New round
+            </button>
+          </div>
+        </div>
+      }
+    }
+  }
+</div>

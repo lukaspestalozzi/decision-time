@@ -24,7 +24,7 @@ test.describe('Clone + Edit flow', () => {
 
     // Now on the new draft's overview. Confirm the name is suffixed.
     await expect(page.getByRole('heading', { name: /Source Draft \(copy\)/, level: 1 })).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('draft')).toBeVisible();
+    await expect(page.getByText('draft', { exact: true })).toBeVisible();
 
     // Click Edit → stepper opens with H1 "Edit Tournament" and prefilled fields.
     await page.getByRole('link', { name: 'Edit' }).click();
