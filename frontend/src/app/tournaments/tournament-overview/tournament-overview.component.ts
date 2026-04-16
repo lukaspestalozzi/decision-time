@@ -56,10 +56,10 @@ export class TournamentOverviewComponent implements OnInit {
     if (!t) return;
     this.api.cloneTournament(t.id).subscribe({
       next: (clone) => {
-        this.notify.showSuccess('Tournament cloned');
+        this.notify.showSuccess('Tournament duplicated');
         this.router.navigate(['/tournaments', clone.id]);
       },
-      error: () => this.notify.showError('Failed to clone tournament'),
+      error: () => this.notify.showError('Failed to duplicate tournament'),
     });
   }
 

@@ -76,14 +76,8 @@ test.describe('Bracket Tournament', () => {
     const entryCards = page.locator('.entry-card');
     await expect(entryCards).toHaveCount(2);
 
-    // Click the first entry card
+    // Click the first entry card — auto-submits the vote
     await entryCards.first().click();
-
-    // Verify it gets the selected class
-    await expect(entryCards.first()).toHaveClass(/selected/);
-
-    // Click Confirm Choice
-    await page.getByRole('button', { name: 'Confirm Choice' }).click();
 
     // With only 2 options, the tournament should complete after 1 vote.
     // The vote page should show the completed result inline.
@@ -130,8 +124,8 @@ test.describe('Bracket Tournament', () => {
     await expect(page.getByRole('heading', { name: 'Clone Source', level: 1 })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('completed')).toBeVisible();
 
-    // Click the Clone button
-    await page.getByRole('button', { name: 'Clone' }).click();
+    // Click the Duplicate button
+    await page.getByRole('button', { name: 'Duplicate' }).click();
 
     // Should navigate to the new tournament overview
     // The new tournament should be in draft status

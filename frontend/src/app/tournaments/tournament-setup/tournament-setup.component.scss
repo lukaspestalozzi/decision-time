@@ -3,10 +3,18 @@
   margin: 0 auto;
 
   h1 {
-    margin-bottom: 24px;
+    margin: 0;
     font-size: 24px;
     font-weight: 500;
   }
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .step-content {

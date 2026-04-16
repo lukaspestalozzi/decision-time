@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { Option } from '../models/option.model';
-import { Result, Tournament } from '../models/tournament.model';
+import { Result, Tournament, TournamentMode } from '../models/tournament.model';
 import { VoteContext } from '../models/vote-context.model';
 import { environment } from '../../environments/environment';
 
@@ -71,6 +71,7 @@ export class ApiService {
     version: number;
     name?: string;
     description?: string;
+    mode?: TournamentMode;
     selected_option_ids?: string[];
     config?: Record<string, unknown>;
   }): Observable<Tournament> {

@@ -20,7 +20,8 @@ test-frontend:
 	cd frontend && npx ng test --watch=false
 
 test-e2e:
-	cd e2e && npx playwright test
+	rm -rf backend/data-e2e
+	cd e2e && npx playwright test ; status=$$? ; rm -rf ../backend/data-e2e ; exit $$status
 
 # Code quality
 lint:
@@ -48,3 +49,4 @@ clean:
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
 	rm -rf frontend/dist frontend/.angular
 	rm -rf backend/*.egg-info
+	rm -rf backend/data-e2e

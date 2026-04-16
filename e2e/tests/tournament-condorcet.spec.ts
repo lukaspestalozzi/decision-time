@@ -36,16 +36,10 @@ test.describe('Condorcet Tournament', () => {
       // VS text should be present
       await expect(page.getByText('VS')).toBeVisible();
 
-      // Click the first entry card
+      // Click the first entry card — auto-submits the vote
       const entryCards = page.locator('.entry-card');
       await expect(entryCards).toHaveCount(2);
       await entryCards.first().click();
-
-      // Verify selection
-      await expect(entryCards.first()).toHaveClass(/selected/);
-
-      // Click Confirm Choice
-      await page.getByRole('button', { name: 'Confirm Choice' }).click();
 
       if (i < 2) {
         // Wait for next matchup to load (matchup number should change)
@@ -125,12 +119,10 @@ test.describe('Condorcet Tournament', () => {
     for (let i = 0; i < 3; i++) {
       await expect(page.getByText('VS')).toBeVisible();
 
+      // Click the first entry card — auto-submits the vote
       const entryCards = page.locator('.entry-card');
       await expect(entryCards).toHaveCount(2);
       await entryCards.first().click();
-      await expect(entryCards.first()).toHaveClass(/selected/);
-
-      await page.getByRole('button', { name: 'Confirm Choice' }).click();
 
       if (i < 2) {
         await expect(page.getByText(`Matchup ${i + 2} of 3`)).toBeVisible({ timeout: 10000 });

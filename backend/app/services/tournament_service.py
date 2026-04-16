@@ -60,6 +60,7 @@ class TournamentService:
         version: int,
         name: str | None = None,
         description: str | None = None,
+        mode: TournamentMode | None = None,
         selected_option_ids: list[UUID] | None = None,
         config: dict[str, Any] | None = None,
     ) -> Tournament:
@@ -72,7 +73,15 @@ class TournamentService:
             tournament.description = description
         if selected_option_ids is not None:
             tournament.selected_option_ids = selected_option_ids
-        if config is not None:
+        mode_changed = mode is not None and mode != tournament.mode
+        if mode_changed:
+            assert mode is not None
+            tournament.mode = mode
+            # Config is mode-specific. When mode changes, any supplied config is
+            # ignored and we reset to the new mode's defaults to avoid cross-mode
+            # validation landmines (e.g. bracket enforces exactly one voter).
+            tournament.config = get_default_config(mode)
+        elif config is not None:
             try:
                 tournament.config = normalize_config(tournament.mode, config)
             except Exception as e:

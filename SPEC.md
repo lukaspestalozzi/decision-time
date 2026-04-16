@@ -1,7 +1,7 @@
 # decision-time — Specification Document
 
-**Version:** 0.7
-**Date:** 2026-04-12
+**Version:** 0.8
+**Date:** 2026-04-16
 
 ---
 
@@ -21,10 +21,11 @@ with a web frontend and persists data on disk.
 ### 1.2 Scope (v1)
 
 - Single user, no authentication
-- Multi-ballot support for Score, Multivoting, and Condorcet modes (voter count set upfront, no identity/auth — voters
-  identified as "Voter 1", "Voter 2", etc.)
+- Multi-ballot support for Score, Multivoting, and Condorcet modes (voter count set upfront, no identity/auth)
+- Custom voter labels (e.g., "Alice", "Bob") configurable per tournament
 - Single ballot for Bracket mode (group discusses each matchup together)
 - Four tournament modes: Bracket, Score, Multivoting, Condorcet
+- Undo/edit ballot while tournament is still active (Score, Multivote, Condorcet)
 - Persistent storage via JSON files on disk
 - Fully testable in CI
 
@@ -40,16 +41,17 @@ with a web frontend and persists data on disk.
 ### 1.4 Multi-Voter UX
 
 Multi-ballot modes support concurrent voting from independent devices/tabs. Each voter opens the tournament URL
-independently and selects their voter slot ("Voter 1", "Voter 2", ..., "Voter N") from a dropdown. Voters who have
-already submitted are grayed out. The engine rejects any vote with a `voter_label` that already has a ballot on record.
+independently and selects their voter slot from a dropdown. Voters who have already submitted are grayed out. The engine
+rejects any vote with a `voter_label` that already has a ballot on record.
 
-The voting URL supports a `?voter=Voter+2` query param to pre-select the voter slot (user can still change it). This
+Voter labels are fully customizable via the `voter_labels` config field (e.g., `["Alice", "Bob", "Carol"]`). The
+tournament setup UI provides a chip input for adding voter names.
+
+The voting URL supports a `?voter=Alice` query param to pre-select the voter slot (user can still change it). This
 enables easy sharing between devices.
 
 For Bracket mode (single ballot), the `voter_label` is hardcoded to `"default"` — assigned automatically, invisible to
 the user. No voter selector is shown.
-
-Custom voter labels (e.g., "Alice", "Bob") are a v2 feature. In v1, labels are auto-generated from `voter_count`.
 
 ---
 
@@ -90,7 +92,7 @@ A tournament is a decision process applied to a set of Options.
 | id                  | UUID              | auto     | Primary key                                                                                       |
 | name                | string            | yes      | What decision is being made (max 256 chars)                                                       |
 | description         | string            | no       | Context for the decision (no limit)                                                               |
-| mode                | TournamentMode    | yes      | bracket / score / multivote / condorcet. Locked on creation, cannot be changed.                   |
+| mode                | TournamentMode    | yes      | bracket / score / multivote / condorcet. Editable in draft, frozen on activation.                 |
 | status              | TournamentStatus  | auto     | draft / active / completed / cancelled                                                            |
 | config              | JSON              | no       | Mode-specific configuration. Editable in draft, frozen on activation. Defaults provided per mode. |
 | version             | int               | auto     | Optimistic concurrency version, incremented on every write.                                       |
@@ -130,11 +132,12 @@ Typical stepper flow:
 In draft state, the user populates the tournament by searching/browsing Options and adding them to`selected_option_ids`.
 The Tournament Setup UI provides:
 
-- **Search by name**: case-insensitive substring match across option names.
-- **Filter by tag**: select one or more tags to narrow the pool.
-- **Bulk add**: select all results from a search/filter and add them at once.
-- **Individual add**: click/drag individual options.
-- **Remove**: remove options from the selection.
+- **Search by name**: case-insensitive substring match across option names and tags.
+- **Filter by tag**: select a tag to narrow the pool (click to toggle).
+- **Select all**: select all options in the current filtered view at once. The button shows the count of filtered
+  results (e.g., "Select all (12)"). Works in combination with search and tag filters.
+- **Individual toggle**: click an option to select/deselect it.
+- **Remove**: remove options from the selection sidebar.
 
 Tag searches are live — new options tagged appropriately appear immediately.
 
@@ -154,8 +157,8 @@ draft → active → completed
          └───────────┘ (can cancel at any point)
 ```
 
-- **draft**: Tournament created. Mode is locked, but config and `selected_option_ids` can still be changed. No entries
-  exist yet — they are created on activation.
+- **draft**: Tournament created. Mode, config, and `selected_option_ids` can all still be changed. No entries exist yet
+  — they are created on activation.
 - **active**: Voting is in progress. Config, selected options, and entries are frozen.
 - **completed**: All rounds/votes are done. Results are final.
 - **cancelled**: Abandoned. Preserved for history but not actionable.
@@ -175,8 +178,14 @@ original tournament are silently excluded during activation. Returns the full ne
 
 #### 2.2.7 Tournament Update (Partial)
 
-`PUT /tournaments/{id}` accepts partial updates. The client sends only the fields to change — `config`,
-`selected_option_ids`, `name`, `description`. Fields not included are left unchanged. Requires `version`.
+`PUT /tournaments/{id}` accepts partial updates. The client sends only the fields to change — `name`, `description`,
+`mode`, `selected_option_ids`, `config`. Fields not included are left unchanged. Requires `version`.
+
+**Mode change rule:** if `mode` is supplied and differs from the current mode, any `config` in the same request is
+**ignored** and the config is reset to defaults for the new mode. Config is mode-specific (bracket enforces a single
+voter; score defines score ranges; etc.), so cross-mode config values would fail validation. Clients that want to
+customize the new mode's config should issue a follow-up `PUT` with only `config`. Mode changes are permitted only in
+`draft` status.
 
 ### 2.3 TournamentEntry
 
@@ -197,23 +206,44 @@ field selection and ensures nothing is lost.
 
 The shape of a vote depends on the tournament mode. All modes share a common envelope:
 
-| Field        | Type     | Required | Notes                                                                                |
-|--------------|----------|----------|--------------------------------------------------------------------------------------|
-| id           | UUID     | auto     | Unique within the tournament                                                         |
-| voter_label  | string   | yes      | e.g. "Voter 1" — must be unique per tournament (except Bracket which uses "default") |
-| round        | int      | no       | Round number (Bracket only)                                                          |
-| submitted_at | datetime | auto     |                                                                                      |
-| payload      | JSON     | yes      | Mode-specific vote data                                                              |
+| Field         | Type       | Required | Notes                                                                            |
+|---------------|------------|----------|----------------------------------------------------------------------------------|
+| id            | UUID       | auto     | Unique within the tournament                                                     |
+| voter_label   | string     | yes      | e.g. "Alice" — must be unique per tournament (except Bracket which uses "default") |
+| round         | int        | no       | Round number (Bracket only)                                                      |
+| submitted_at  | datetime   | auto     |                                                                                  |
+| payload       | JSON       | yes      | Mode-specific vote data                                                          |
+| status        | VoteStatus | auto     | `active` or `superseded` (default: `active`)                                     |
+| superseded_at | datetime   | auto     | Set when vote is undone, null otherwise                                          |
+
+Votes are **append-only**. When a voter undoes their vote, the original record is marked `superseded` (not deleted) and
+`superseded_at` is set. Tournament state is recomputed by replaying only `active` votes. This preserves a full audit
+trail.
 
 For Bracket mode, multiple Vote records exist (one per matchup), all with `voter_label: "default"`. For Condorcet mode,
 multiple Vote records exist per voter (one per pairwise matchup). For ballot modes (Score, Multivote), one Vote per
 voter.
 
-Duplicate `voter_label` detection: the engine rejects any ballot submission where the `voter_label` already has a
-complete ballot on record. For Bracket, "complete" means all matchups in the tournament have been decided (since it's
+Duplicate `voter_label` detection: the engine rejects any ballot submission where the `voter_label` already has an
+active ballot on record. For Bracket, "complete" means all matchups in the tournament have been decided (since it's
 always single-voter).
 
 Payload schemas per mode are defined in Section 3.
+
+#### 2.4.1 Undo / Edit Ballot
+
+Voters can undo their most recent active vote while the tournament is still active (i.e., not all required votes have
+been submitted yet). Once the last vote is submitted and the tournament transitions to `completed`, no further undos are
+possible.
+
+Undo behavior:
+
+- Marks the voter's latest `active` vote as `superseded`.
+- Replays all remaining `active` votes to recompute tournament state.
+- The voter can then submit a new ballot.
+- Controlled by the `allow_undo` config flag (default: `true`). When `false`, the undo endpoint rejects all requests.
+- The frontend pre-captures the voter's previous scores/allocations before the undo call, so the re-opened ballot can
+  be pre-filled for a smooth editing experience.
 
 ### 2.5 Result
 
@@ -257,12 +287,15 @@ The frontend dispatches on `type`:
 - `"bracket_matchup"` → show one matchup with round context, call `/vote` per matchup
 - `"condorcet_matchup"` → show one matchup with overall progress, call `/vote` per matchup
 - `"ballot"` → show full ballot form, call `/vote` once
-- `"already_voted"` → show waiting/status screen
+- `"already_voted"` → show ballot summary with "Edit my ballot" option (if `allow_undo` is enabled)
 - `"completed"` → show results
 
 Both Bracket and Condorcet use a matchup-based UI but with different semantics: Bracket eliminates losers round by
 round, Condorcet runs every option against every other option (round-robin). The progress indicator reflects this —
 Bracket shows "Round 2, Match 1 of 2", Condorcet shows "Matchup 3 of 10".
+
+Matchup selection is **instant** — clicking an option immediately submits the vote for that matchup (no separate confirm
+step). This streamlines the experience, especially for Condorcet where voters go through many matchups.
 
 This abstraction allows adding new modes without modifying core logic.
 
@@ -348,7 +381,8 @@ eliminated.
 {
   "min_score": 1,
   "max_score": 5,
-  "voter_count": 1
+  "voter_labels": ["Voter 1"],
+  "allow_undo": true
 }
 ```
 
@@ -389,7 +423,7 @@ Scores are always integers.
 - Ties are allowed — entries with equal average share the same rank.
 - v1 uses simple averaging. More robust aggregation strategies are a v2 consideration.
 
-**Voters:** `voter_count` ballots required. Tournament auto-completes when all ballots are submitted.
+**Voters:** One ballot per voter label. Tournament completes immediately when all ballots are submitted.
 
 ### 3.3 Multivoting
 
@@ -402,7 +436,8 @@ spread them.
 {
   "total_votes": null,
   "max_per_option": null,
-  "voter_count": 1
+  "voter_labels": ["Voter 1"],
+  "allow_undo": true
 }
 ```
 
@@ -449,7 +484,7 @@ spread them.
 - Result: options ranked by total votes received descending (summed across all ballots).
 - Ties are allowed — entries with equal totals share the same rank.
 
-**Voters:** `voter_count` ballots required. Tournament auto-completes when all ballots are submitted.
+**Voters:** One ballot per voter label. Tournament completes immediately when all ballots are submitted.
 
 ### 3.4 Condorcet (Schulze Method)
 
@@ -462,7 +497,8 @@ always selected.
 
 ```json
 {
-  "voter_count": 1
+  "voter_labels": ["Voter 1"],
+  "allow_undo": true
 }
 ```
 
@@ -489,13 +525,13 @@ always selected.
     }
   ],
   "voter_matchup_orders": {
-    "Voter 1": [
+    "Alice": [
       "matchup_id_7",
       "matchup_id_3",
       "matchup_id_1",
       "..."
     ],
-    "Voter 2": [
+    "Bob": [
       "matchup_id_2",
       "matchup_id_5",
       "matchup_id_9",
@@ -503,11 +539,11 @@ always selected.
     ]
   },
   "voter_progress": {
-    "Voter 1": {
+    "Alice": {
       "completed_matchups": 3,
       "total_matchups": 10
     },
-    "Voter 2": {
+    "Bob": {
       "completed_matchups": 0,
       "total_matchups": 10
     }
@@ -534,8 +570,8 @@ always selected.
   reported.
 - Result includes the pairwise matrix and Schulze path strengths as metadata.
 
-**Voters:** `voter_count` ballots required. Multiple voters vote concurrently, each working through their own set of
-matchups independently. Tournament auto-completes when all voters finish all matchups.
+**Voters:** One ballot per voter label. Multiple voters vote concurrently, each working through their own set of
+matchups independently. Tournament completes immediately when all voters finish all matchups.
 
 ---
 
@@ -636,7 +672,7 @@ editing Options. Scans all option files on each call (acceptable for v1 scale; i
 | Method | Path                                         | Description                                                    | Response          |
 |--------|----------------------------------------------|----------------------------------------------------------------|-------------------|
 | GET    | /tournaments                                 | List all, filter by status                                     | 200: Tournament[] |
-| POST   | /tournaments                                 | Create (status=draft). Mode locked.                            | 201: Tournament   |
+| POST   | /tournaments                                 | Create (status=draft).                                         | 201: Tournament   |
 | GET    | /tournaments/{id}                            | Get full tournament with state                                 | 200: Tournament   |
 | PUT    | /tournaments/{id}                            | Partial update (draft only). Requires `version`.               | 200: Tournament   |
 | DELETE | /tournaments/{id}                            | Delete tournament                                              | 204               |
@@ -645,6 +681,7 @@ editing Options. Scans all option files on each call (acceptable for v1 scale; i
 | POST   | /tournaments/{id}/clone                      | Clone to new draft                                             | 201: Tournament   |
 | GET    | /tournaments/{id}/vote-context?voter={label} | Get current vote context for a voter                           | 200: VoteContext  |
 | POST   | /tournaments/{id}/vote                       | Submit a vote. Requires `version`.                             | 200: Tournament   |
+| POST   | /tournaments/{id}/undo                       | Undo latest vote for a voter. Requires `version`.              | 200: {tournament, vote_context} |
 | GET    | /tournaments/{id}/result                     | Get result (completed only)                                    | 200: Result       |
 | GET    | /tournaments/{id}/state                      | Get full internal state (debug)                                | 200: JSON         |
 
@@ -714,7 +751,8 @@ Used for Docker `HEALTHCHECK` and uptime monitoring. Prometheus-style metrics ma
 
 - **Dashboard**: Active tournaments, recent results, quick actions. Empty state: "Create your first tournament" CTA.
 - **Options**: CRUD for options. Search/filter by name and tag. Bulk import (paste textarea, split by newlines, POST as
-  JSON). Bulk tag management (select multiple, add/remove tags). Empty state: "Add options to get started."
+  JSON). Bulk tag management (select multiple, add/remove tags). Tag input fields provide autocomplete suggestions from
+  existing tags. Empty state: "Add options to get started."
 - **Tournament Setup**: Angular Material Stepper — Step 1: Name + pick mode. Step 2: Select options (search by name/tag,
   bulk add, drag-and-drop). Step 3: Configure mode-specific settings (including voter count for multi-ballot modes).
   Step 4: Review and activate.
@@ -876,8 +914,10 @@ volumes:
 
 ### 6.8 Dev Environment
 
-- **Backend**: Python venv, `pip install -e ".[dev]"`, `uvicorn app.main:app --reload --port 8009`.
-- **Frontend**: `ng serve` on port 4200 with proxy config forwarding `/api/*` to `localhost:8009`.
+- **Backend**: Python venv, `uv sync --extra dev`, `uvicorn app.main:app --reload --port 8010`.
+- **Frontend**: `ng serve` on port 8009 with proxy config forwarding `/api/*` to `localhost:8010`.
+- Developer opens `http://localhost:8009` — the same port as production. The Angular dev server handles frontend
+  requests and proxies API calls to the backend on port 8010.
 - No Docker required for local development.
 - Documented in `README.md` with step-by-step setup instructions.
 
@@ -1048,12 +1088,10 @@ These are explicitly out of scope but the architecture should not block them:
 - **Option metadata**: Images, links, custom fields.
 - **Import/export**: CSV import for options, JSON export for tournaments.
 - **Tournament templates**: Save a tournament config for reuse.
-- **Undo**: Step back in a tournament (un-vote).
 - **Real-time**: WebSocket for live multi-voter tournaments.
 - **Robust score aggregation**: Alternatives to simple averaging for Score mode (normalization, median, etc.).
 - **Manual bracket seeding**: User-defined seed positions.
 - **Backup/restore**: Structured export, import, and data folder merging.
-- **Custom voter labels**: Named voters (e.g., "Alice", "Bob").
 - **Consistency repair**: CLI command to scan and fix dangling references.
 - **Saved searches / smart collections**: Named tag queries that act like virtual lists.
 - **In-memory tag cache**: Cache aggregated tags with invalidation on option writes.
@@ -1074,7 +1112,8 @@ Preserved for traceability.
 6. **Minimum options per tournament**: 2 for all modes, validated on activation. ✅
 7. **Bracket multi-ballot**: Not supported — single ballot, voter_label hardcoded to "default". ✅
 8. **TournamentEntry snapshot**: Full Option entity (all fields). ✅
-9. **Tournament mode mutability**: Locked on creation. ✅
+9. **Tournament mode mutability**: Editable in draft (clients may change mode via `PUT`; config resets to defaults
+    on mode change). Frozen on activation. ✅
 10. **Draft state semantics**: Config and selected options editable. Entries created on activation. ✅
 11. **Score aggregation**: Integer scores only, simple average in v1. ✅
 12. **Engine interface**: `get_vote_context` returns tagged union (bracket_matchup, condorcet_matchup, ballot,
@@ -1131,6 +1170,19 @@ Preserved for traceability.
 61. **API versioning**: `/v1` prefix, no backward compatibility guarantees. ✅
 62. **Health check**: `GET /api/v1/health`. Prometheus metrics as v2 consideration. ✅
 63. **OpenAPI docs**: Exposed at `/docs` and `/api/v1/openapi.json`. ✅
+64. **Custom voter labels**: `voter_labels` config field replaces `voter_count`. Fully customizable names. ✅
+65. **Undo / edit ballot**: Voters can undo while tournament is active. Append-only votes with `superseded` status.
+    Controlled by `allow_undo` config flag. ✅
+66. **Immediate tournament completion**: No cool-off period. Tournament transitions to `completed` immediately when the
+    last required vote is submitted. Undo is only available while the tournament is still active. ✅
+67. **Tag autocomplete**: Tag input fields in option create/edit and bulk import dialogs suggest existing tags via
+    autocomplete dropdown. ✅
+68. **Select all filtered**: Tournament population step includes a "Select all" button that adds all currently filtered
+    options to the selection. ✅
+69. **Auto-confirm matchups**: Bracket and Condorcet matchup UIs submit the vote immediately on click — no separate
+    confirm button. ✅
+70. **Dev server port alignment**: Frontend dev server runs on port 8009 (same as production), backend on 8010
+    internally. Proxy handles API routing. ✅
 
 ---
 
@@ -1156,6 +1208,10 @@ This section provides context on how the spec evolved. It is not normative.
   handling pattern, logging strategy, dev environment setup, Dockerfile details, environment variables, Makefile
   targets, serialization conventions, OpenAPI docs, health check endpoint. Angular 19, Jest, no base repository class,
   Schulze from scratch, VoteContext subtypes for bracket/condorcet.
+- **v0.8** (2026-04-16): Post-implementation updates. Custom voter labels (replaces voter_count). Undo/edit ballot
+  feature with append-only vote history and allow_undo config. Removed cool-off grace period — tournaments complete
+  immediately on last vote. Tag autocomplete in option dialogs. "Select all" button in tournament population.
+  Auto-confirm for bracket and condorcet matchups. Dev server port alignment (frontend on 8009, backend on 8010).
 
 ---
 

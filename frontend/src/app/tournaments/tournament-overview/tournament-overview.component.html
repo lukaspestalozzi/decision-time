@@ -37,7 +37,7 @@
     <div class="actions">
       @switch (t.status) {
         @case ('draft') {
-          <a mat-raised-button color="primary" [routerLink]="['/tournaments/new']" [queryParams]="{edit: t.id}">Edit</a>
+          <a mat-raised-button color="primary" [routerLink]="['/tournaments', t.id, 'edit']">Edit</a>
           <button mat-raised-button color="warn" (click)="onCancel()">Cancel</button>
           <button mat-button color="warn" (click)="onDelete()">Delete</button>
         }
@@ -47,10 +47,10 @@
         }
         @case ('completed') {
           <a mat-raised-button color="primary" [routerLink]="['/tournaments', t.id, 'result']">View Result</a>
-          <button mat-raised-button (click)="onClone()">Clone</button>
+          <button mat-raised-button (click)="onClone()">Duplicate</button>
         }
         @case ('cancelled') {
-          <button mat-raised-button (click)="onClone()">Clone</button>
+          <button mat-raised-button (click)="onClone()">Duplicate</button>
           <button mat-button color="warn" (click)="onDelete()">Delete</button>
         }
       }

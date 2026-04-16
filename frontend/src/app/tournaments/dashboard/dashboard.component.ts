@@ -27,11 +27,15 @@ export class DashboardComponent implements OnInit {
 
   activeTournaments = signal<Tournament[]>([]);
   completedTournaments = signal<Tournament[]>([]);
+  cancelledTournaments = signal<Tournament[]>([]);
   loading = signal(true);
   error = signal<string | null>(null);
 
   isEmpty = computed(
-    () => this.activeTournaments().length === 0 && this.completedTournaments().length === 0,
+    () =>
+      this.activeTournaments().length === 0 &&
+      this.completedTournaments().length === 0 &&
+      this.cancelledTournaments().length === 0,
   );
 
   ngOnInit(): void {
@@ -45,10 +49,12 @@ export class DashboardComponent implements OnInit {
     forkJoin({
       active: this.api.listTournaments('active,draft'),
       completed: this.api.listTournaments('completed'),
+      cancelled: this.api.listTournaments('cancelled'),
     }).subscribe({
-      next: ({ active, completed }) => {
+      next: ({ active, completed, cancelled }) => {
         this.activeTournaments.set(active);
         this.completedTournaments.set(completed);
+        this.cancelledTournaments.set(cancelled);
         this.loading.set(false);
       },
       error: (err) => {

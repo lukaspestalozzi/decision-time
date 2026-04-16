@@ -1,5 +1,6 @@
-import { afterNextRender, Component, computed, inject, Injector, signal, ViewChild } from '@angular/core';
-import { Router } from '@angular/router';
+import { afterNextRender, Component, computed, DestroyRef, inject, Injector, OnInit, signal, ViewChild } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ENTER, COMMA } from '@angular/cdk/keycodes';
 import { STEPPER_GLOBAL_OPTIONS } from '@angular/cdk/stepper';
@@ -13,10 +14,12 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ApiService } from '../../services/api.service';
 import { NotificationService } from '../../services/notification.service';
 import { Tournament, TournamentMode } from '../../models/tournament.model';
 import { Option } from '../../models/option.model';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../../shared/confirm-dialog/confirm-dialog.component';
 
 interface ModeInfo {
   value: TournamentMode;
@@ -38,6 +41,8 @@ interface ModeInfo {
     MatIconModule,
     MatCardModule,
     MatProgressSpinnerModule,
+    MatDialogModule,
+    RouterLink,
   ],
   templateUrl: './tournament-setup.component.html',
   styleUrl: './tournament-setup.component.scss',
@@ -45,13 +50,21 @@ interface ModeInfo {
     { provide: STEPPER_GLOBAL_OPTIONS, useValue: { showError: true } },
   ],
 })
-export class TournamentSetupComponent {
+export class TournamentSetupComponent implements OnInit {
   private api = inject(ApiService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private notify = inject(NotificationService);
   private injector = inject(Injector);
+  private destroyRef = inject(DestroyRef);
+  private dialog = inject(MatDialog);
 
   @ViewChild('stepper') stepper!: MatStepper;
+
+  // --- Edit mode state ---
+  isEditMode = signal(false);
+  editId = signal<string | null>(null);
+  editLoading = signal(false);
 
   // --- Step 1: Name + Mode ---
   name = signal('');
@@ -59,6 +72,9 @@ export class TournamentSetupComponent {
   mode = signal<TournamentMode | null>(null);
   step1Valid = computed(() => this.name().trim().length > 0 && this.mode() !== null);
   creatingTournament = signal(false);
+
+  // Snapshot of step-1 fields at load/save time — used to skip no-op PUTs.
+  private step1Snapshot = signal<{ name: string; description: string; mode: TournamentMode | null } | null>(null);
 
   // Created tournament (after step 1 completes)
   tournament = signal<Tournament | null>(null);
@@ -95,6 +111,10 @@ export class TournamentSetupComponent {
   // --- Step 3: Configure ---
   savingConfig = signal(false);
   step3Completed = computed(() => Object.keys(this.tournament()?.config ?? {}).length > 0);
+
+  // Hidden round-trip of allow_undo — the setup UI doesn't expose it yet, but
+  // partial updates that rebuild config from signals must not silently flip it.
+  allowUndo = signal(true);
 
   // Bracket config
   shuffleSeed = signal(true);
@@ -169,6 +189,92 @@ export class TournamentSetupComponent {
     },
   ];
 
+  ngOnInit(): void {
+    const id = this.route.snapshot.paramMap.get('id');
+    if (id) {
+      this.isEditMode.set(true);
+      this.editId.set(id);
+      this.loadForEdit(id);
+    }
+  }
+
+  private loadForEdit(id: string): void {
+    this.editLoading.set(true);
+    this.api.getTournament(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (t) => {
+        this.prefillFromTournament(t);
+        this.loadOptions();
+        this.editLoading.set(false);
+      },
+      error: () => {
+        this.editLoading.set(false);
+        this.notify.showError('Failed to load tournament for editing.');
+        this.router.navigate(['/']);
+      },
+    });
+  }
+
+  /** Populate every stepper signal from a loaded tournament. */
+  private prefillFromTournament(t: Tournament): void {
+    this.tournament.set(t);
+    this.name.set(t.name);
+    this.description.set(t.description);
+    this.mode.set(t.mode);
+    this.selectedOptionIds.set(new Set(t.selected_option_ids));
+    this.step1Snapshot.set({ name: t.name, description: t.description, mode: t.mode });
+    this.applyConfigToSignals(t.mode, t.config);
+  }
+
+  /** Copy mode-specific config into the matching signals. */
+  private applyConfigToSignals(mode: TournamentMode, config: Record<string, unknown>): void {
+    this.allowUndo.set((config['allow_undo'] as boolean | undefined) ?? true);
+    const voterLabels = (config['voter_labels'] as string[] | undefined) ?? ['Voter 1'];
+
+    switch (mode) {
+      case 'bracket':
+        this.shuffleSeed.set((config['shuffle_seed'] as boolean | undefined) ?? true);
+        this.thirdPlaceMatch.set((config['third_place_match'] as boolean | undefined) ?? false);
+        break;
+      case 'score':
+        this.minScore.set((config['min_score'] as number | undefined) ?? 1);
+        this.maxScore.set((config['max_score'] as number | undefined) ?? 5);
+        this.scoreVoterLabels.set([...voterLabels]);
+        break;
+      case 'multivote':
+        this.totalVotes.set((config['total_votes'] as number | null | undefined) ?? null);
+        this.maxPerOption.set((config['max_per_option'] as number | null | undefined) ?? null);
+        this.multivoteVoterLabels.set([...voterLabels]);
+        break;
+      case 'condorcet':
+        this.condorcetVoterLabels.set([...voterLabels]);
+        break;
+    }
+  }
+
+  /** Reset mode-specific config signals to defaults for the given mode. */
+  private resetConfigSignalsForMode(mode: TournamentMode): void {
+    this.allowUndo.set(true);
+    switch (mode) {
+      case 'bracket':
+        this.shuffleSeed.set(true);
+        this.thirdPlaceMatch.set(false);
+        break;
+      case 'score':
+        this.minScore.set(1);
+        this.maxScore.set(5);
+        this.scoreVoterLabels.set(['Voter 1']);
+        break;
+      case 'multivote':
+        this.totalVotes.set(null);
+        this.maxPerOption.set(null);
+        this.multivoteVoterLabels.set(['Voter 1']);
+        break;
+      case 'condorcet':
+        this.condorcetVoterLabels.set(['Voter 1']);
+        break;
+    }
+  }
+
   // --- Stepper ---
 
   /** Advance stepper after the next render so [completed] bindings are applied. */
@@ -180,6 +286,37 @@ export class TournamentSetupComponent {
 
   modeLabel(mode: TournamentMode): string {
     return this.modes.find(m => m.value === mode)?.label ?? mode;
+  }
+
+  pageTitle = computed(() => (this.isEditMode() ? 'Edit Tournament' : 'New Tournament'));
+
+  step1ButtonLabel = computed(() => (this.isEditMode() ? 'Save' : 'Next'));
+
+  // --- Mode selection (with confirm in edit mode) ---
+
+  onModeSelect(newMode: TournamentMode): void {
+    if (this.mode() === newMode) return;
+    if (!this.isEditMode()) {
+      this.mode.set(newMode);
+      return;
+    }
+    const currentModeLabel = this.mode() ? this.modeLabel(this.mode()!) : '';
+    const data: ConfirmDialogData = {
+      title: 'Change tournament mode?',
+      message: `Changing from ${currentModeLabel} to ${this.modeLabel(newMode)} will reset this tournament's configuration to defaults. Continue?`,
+      confirmLabel: 'Change mode',
+      cancelLabel: 'Cancel',
+    };
+    this.dialog
+      .open(ConfirmDialogComponent, { data })
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((confirmed) => {
+        if (confirmed) {
+          this.mode.set(newMode);
+          this.resetConfigSignalsForMode(newMode);
+        }
+      });
   }
 
   // --- Summary for Step 4 ---
@@ -231,8 +368,13 @@ export class TournamentSetupComponent {
 
   createTournament(): void {
     if (!this.step1Valid() || this.creatingTournament()) return;
-    this.creatingTournament.set(true);
 
+    if (this.isEditMode()) {
+      this.saveStep1Edits();
+      return;
+    }
+
+    this.creatingTournament.set(true);
     const body: { name: string; mode: string; description?: string } = {
       name: this.name().trim(),
       mode: this.mode()!,
@@ -252,6 +394,55 @@ export class TournamentSetupComponent {
         this.creatingTournament.set(false);
         this.notify.showError('Failed to create tournament.');
         console.error('Create tournament error:', err);
+      },
+    });
+  }
+
+  private saveStep1Edits(): void {
+    const t = this.tournament();
+    if (!t) return;
+
+    const nextName = this.name().trim();
+    const nextDesc = this.description().trim();
+    const nextMode = this.mode();
+    const snap = this.step1Snapshot();
+
+    const unchanged = snap
+      && snap.name === nextName
+      && snap.description === nextDesc
+      && snap.mode === nextMode;
+    if (unchanged) {
+      this.advanceStepper();
+      return;
+    }
+
+    this.creatingTournament.set(true);
+    const body: {
+      version: number;
+      name?: string;
+      description?: string;
+      mode?: TournamentMode;
+    } = { version: t.version };
+    if (!snap || snap.name !== nextName) body.name = nextName;
+    if (!snap || snap.description !== nextDesc) body.description = nextDesc;
+    if (nextMode && (!snap || snap.mode !== nextMode)) body.mode = nextMode;
+
+    this.api.updateTournament(t.id, body).subscribe({
+      next: (updated) => {
+        this.tournament.set(updated);
+        // If mode changed, re-apply config from server defaults (server authoritative).
+        if (snap && snap.mode !== updated.mode) {
+          this.applyConfigToSignals(updated.mode, updated.config);
+        }
+        this.step1Snapshot.set({ name: updated.name, description: updated.description, mode: updated.mode });
+        this.creatingTournament.set(false);
+        this.notify.showSuccess('Changes saved.');
+        this.advanceStepper();
+      },
+      error: (err) => {
+        this.creatingTournament.set(false);
+        this.notify.showError('Failed to save changes.');
+        console.error('Update tournament error:', err);
       },
     });
   }
@@ -342,26 +533,31 @@ export class TournamentSetupComponent {
     const t = this.tournament();
     if (!t) return {};
 
+    const base = { allow_undo: this.allowUndo() };
     switch (t.mode) {
       case 'bracket':
         return {
+          ...base,
           shuffle_seed: this.shuffleSeed(),
           third_place_match: this.thirdPlaceMatch(),
         };
       case 'score':
         return {
+          ...base,
           min_score: this.minScore(),
           max_score: this.maxScore(),
           voter_labels: this.scoreVoterLabels(),
         };
       case 'multivote':
         return {
+          ...base,
           total_votes: this.totalVotes(),
           max_per_option: this.maxPerOption(),
           voter_labels: this.multivoteVoterLabels(),
         };
       case 'condorcet':
         return {
+          ...base,
           voter_labels: this.condorcetVoterLabels(),
         };
       default:

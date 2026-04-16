@@ -57,6 +57,66 @@ class TestTournamentCRUD:
         assert resp.status_code == 409
         assert resp.json()["error"]["code"] == "CONFLICT"
 
+    def test_update_mode_in_draft_succeeds_and_resets_config(self, client: TestClient) -> None:
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        # Bracket config defaults include shuffle_seed and third_place_match.
+        assert "shuffle_seed" in create.json()["config"]
+
+        resp = client.put(f"/api/v1/tournaments/{tid}", json={"version": 1, "mode": "score"})
+        assert resp.status_code == 200
+        updated = resp.json()
+        assert updated["mode"] == "score"
+        # Mode change resets config to score defaults.
+        assert "min_score" in updated["config"]
+        assert "max_score" in updated["config"]
+        assert "shuffle_seed" not in updated["config"]
+
+    def test_update_mode_ignores_supplied_config(self, client: TestClient) -> None:
+        # A client that sends {mode, config} together: the config is ignored and
+        # defaults for the new mode are applied instead. This documents the
+        # strict contract described in SPEC §2.2.7.
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        resp = client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={
+                "version": 1,
+                "mode": "score",
+                "config": {"min_score": 0, "max_score": 100, "voter_labels": ["X", "Y"]},
+            },
+        )
+        assert resp.status_code == 200
+        updated = resp.json()
+        assert updated["mode"] == "score"
+        # Defaults applied — client-supplied config ignored when mode changes.
+        assert updated["config"]["min_score"] == 1
+        assert updated["config"]["max_score"] == 5
+        assert updated["config"]["voter_labels"] == ["default"]
+
+    def test_update_same_mode_with_config_normalizes_config(self, client: TestClient) -> None:
+        # When mode matches (or is omitted) and config is supplied, the existing
+        # normalize path still applies.
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "score"})
+        tid = create.json()["id"]
+        resp = client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={"version": 1, "mode": "score", "config": {"min_score": 0, "max_score": 10}},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["config"]["min_score"] == 0
+        assert resp.json()["config"]["max_score"] == 10
+
+    def test_update_mode_rejected_on_non_draft(self, client: TestClient) -> None:
+        options = _create_options(client, 2)
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
+        tid = create.json()["id"]
+        client.put(f"/api/v1/tournaments/{tid}", json={"version": 1, "selected_option_ids": [o["id"] for o in options]})
+        client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": 2})
+        resp = client.put(f"/api/v1/tournaments/{tid}", json={"version": 3, "mode": "score"})
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "INVALID_STATE"
+
     def test_delete_tournament_returns_204(self, client: TestClient) -> None:
         create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "bracket"})
         tid = create.json()["id"]

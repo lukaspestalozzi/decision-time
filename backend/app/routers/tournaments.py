@@ -24,8 +24,9 @@ class CreateTournamentRequest(BaseModel):
 
 class UpdateTournamentRequest(BaseModel):
     version: int
-    name: str | None = None
+    name: str | None = Field(default=None, max_length=256)
     description: str | None = None
+    mode: TournamentMode | None = None
     selected_option_ids: list[UUID] | None = None
     config: dict[str, Any] | None = None
 
@@ -95,6 +96,7 @@ def update_tournament(
         version=body.version,
         name=body.name,
         description=body.description,
+        mode=body.mode,
         selected_option_ids=body.selected_option_ids,
         config=body.config,
     )

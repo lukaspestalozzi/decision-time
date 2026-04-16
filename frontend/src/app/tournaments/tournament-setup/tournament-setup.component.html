@@ -1,9 +1,24 @@
 <div class="setup-container">
-  <h1>New Tournament</h1>
+  <div class="page-header">
+    <h1>{{ pageTitle() }}</h1>
+    @if (isEditMode() && editId(); as id) {
+      <a mat-button [routerLink]="['/tournaments', id]">
+        <mat-icon>arrow_back</mat-icon>
+        Back to overview
+      </a>
+    }
+  </div>
+
+  @if (editLoading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading tournament...</p>
+    </div>
+  }
 
   <mat-stepper #stepper linear>
     <!-- Step 1: Name + Mode -->
-    <mat-step [completed]="tournament() !== null" [editable]="false">
+    <mat-step [completed]="tournament() !== null" [editable]="isEditMode()">
       <ng-template matStepLabel>Name &amp; Mode</ng-template>
 
       <div class="step-content">
@@ -34,7 +49,7 @@
         <div class="mode-grid">
           @for (m of modes; track m.value) {
             <mat-card [class.mode-selected]="mode() === m.value"
-                      (click)="mode.set(m.value)"
+                      (click)="onModeSelect(m.value)"
                       class="mode-card"
                       appearance="outlined">
               <mat-card-header>
@@ -59,7 +74,7 @@
             @if (creatingTournament()) {
               <mat-spinner diameter="20"></mat-spinner>
             } @else {
-              Next
+              {{ step1ButtonLabel() }}
             }
           </button>
         </div>
@@ -67,7 +82,7 @@
     </mat-step>
 
     <!-- Step 2: Select Options -->
-    <mat-step [completed]="step2Completed()" [editable]="false">
+    <mat-step [completed]="step2Completed()" [editable]="isEditMode()">
       <ng-template matStepLabel>Select Options</ng-template>
 
       <div class="step-content">
@@ -176,7 +191,7 @@
     </mat-step>
 
     <!-- Step 3: Configure -->
-    <mat-step [completed]="step3Completed()" [editable]="false">
+    <mat-step [completed]="step3Completed()" [editable]="isEditMode()">
       <ng-template matStepLabel>Configure</ng-template>
 
       <div class="step-content">
