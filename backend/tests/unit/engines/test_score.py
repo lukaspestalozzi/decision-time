@@ -204,3 +204,94 @@ class TestScoreResult:
         rank_1 = [r for r in result.ranking if r["rank"] == 1]
         assert len(rank_1) == 1
         assert rank_1[0]["entry_id"] == str(entries[1].id)
+
+
+class TestScoreReplayState:
+    def test_replay_with_no_votes_equals_initialize(self) -> None:
+        engine = ScoreEngine()
+        entries = _make_entries(3)
+        config = {"voter_labels": _voter_labels(2)}
+        initial = engine.initialize(entries, config)
+        replayed = engine.replay_state(entries, config, [])
+        assert replayed == initial
+
+    def test_replay_with_single_vote_equals_sequential_submit(self) -> None:
+        from app.schemas.tournament import Vote
+
+        engine = ScoreEngine()
+        entries = _make_entries(3)
+        config = {"voter_labels": _voter_labels(2)}
+        sequential = engine.submit_vote(
+            engine.initialize(entries, config),
+            "Voter 1",
+            _make_scores(entries, [5, 3, 1]),
+        )
+        votes = [Vote(voter_label="Voter 1", payload=_make_scores(entries, [5, 3, 1]))]
+        replayed = engine.replay_state(entries, config, votes)
+        assert replayed == sequential
+
+    def test_replay_with_subset_of_votes_is_not_complete(self) -> None:
+        from app.schemas.tournament import Vote
+
+        engine = ScoreEngine()
+        entries = _make_entries(3)
+        config = {"voter_labels": _voter_labels(3)}
+        votes = [
+            Vote(voter_label="Voter 1", payload=_make_scores(entries, [5, 3, 1])),
+            Vote(voter_label="Voter 2", payload=_make_scores(entries, [3, 5, 1])),
+        ]
+        state = engine.replay_state(entries, config, votes)
+        assert not engine.is_complete(state)
+        assert state["ballots_submitted"] == 2
+
+    def test_replay_omitting_a_vote_allows_resubmit(self) -> None:
+        """If voter's vote is filtered out of active_votes, they can submit again."""
+        from app.schemas.tournament import Vote
+
+        engine = ScoreEngine()
+        entries = _make_entries(3)
+        config = {"voter_labels": _voter_labels(2)}
+        # Submit both votes, then replay with only one
+        votes = [
+            Vote(voter_label="Voter 1", payload=_make_scores(entries, [5, 3, 1])),
+            Vote(voter_label="Voter 2", payload=_make_scores(entries, [3, 5, 1])),
+        ]
+        full_state = engine.replay_state(entries, config, votes)
+        assert engine.is_complete(full_state)
+
+        # Now replay with only Voter 1's vote — Voter 2 should be able to vote
+        partial_state = engine.replay_state(entries, config, votes[:1])
+        assert not engine.is_complete(partial_state)
+        # Re-submit Voter 2 on top of the partial state
+        new_state = engine.submit_vote(
+            partial_state,
+            "Voter 2",
+            _make_scores(entries, [1, 1, 5]),
+        )
+        assert engine.is_complete(new_state)
+
+    def test_replay_sorts_votes_by_submitted_at(self) -> None:
+        """Votes passed out of chronological order are replayed in submission order."""
+        from datetime import UTC, datetime
+
+        from app.schemas.tournament import Vote
+
+        engine = ScoreEngine()
+        entries = _make_entries(2)
+        config = {"voter_labels": _voter_labels(2)}
+        early = Vote(
+            voter_label="Voter 1",
+            submitted_at=datetime(2026, 4, 15, 10, 0, 0, tzinfo=UTC),
+            payload=_make_scores(entries, [5, 1]),
+        )
+        late = Vote(
+            voter_label="Voter 2",
+            submitted_at=datetime(2026, 4, 15, 11, 0, 0, tzinfo=UTC),
+            payload=_make_scores(entries, [1, 5]),
+        )
+        # Pass in reverse order — replay should still work
+        state = engine.replay_state(entries, config, [late, early])
+        assert engine.is_complete(state)
+        # Both voters recorded
+        voted = {v["voter_label"] for v in state["votes"]}
+        assert voted == {"Voter 1", "Voter 2"}

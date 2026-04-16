@@ -1,0 +1,33 @@
+<mat-card class="ballot-summary">
+  <div class="header">
+    <mat-icon class="icon">check_circle</mat-icon>
+    <h2>Your ballot is in</h2>
+  </div>
+
+  <div class="summary-rows">
+    @for (row of summaryRows(); track row.name) {
+      <div class="row">
+        <span class="row-name">{{ row.name }}</span>
+        <span class="row-value">{{ row.value }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="progress">
+    @if (secondsUntilFinalize() !== null) {
+      <p class="finalizing">
+        All ballots submitted. Tournament will finalize in {{ secondsUntilFinalize() }}s.
+      </p>
+    } @else {
+      <p>{{ ballotsSubmitted() }} of {{ ballotsRequired() }} voters have submitted</p>
+    }
+  </div>
+
+  @if (canEdit()) {
+    <div class="actions">
+      <button mat-stroked-button color="primary" (click)="onEditClick()">
+        Edit my ballot
+      </button>
+    </div>
+  }
+</mat-card>

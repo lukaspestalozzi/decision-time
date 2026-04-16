@@ -1,6 +1,7 @@
 """Tournament domain models: Tournament, TournamentEntry, Vote, Result."""
 
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -18,14 +19,31 @@ class TournamentEntry(DecisionTimeModel):
     option_snapshot: dict[str, Any]
 
 
+class VoteStatus(StrEnum):
+    """Lifecycle status of a Vote record.
+
+    Votes are append-only — undo/revise marks them SUPERSEDED rather than deleting.
+    """
+
+    ACTIVE = "active"
+    SUPERSEDED = "superseded"
+
+
 class Vote(DecisionTimeModel):
-    """A vote or judgment submitted during a tournament."""
+    """A vote or judgment submitted during a tournament.
+
+    Votes are never mutated or deleted. When undone, `status` is flipped to
+    SUPERSEDED and `superseded_at` is set; state is recomputed by replaying
+    only ACTIVE votes.
+    """
 
     id: UUID = Field(default_factory=uuid4)
     voter_label: str
     round: int | None = None
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     payload: dict[str, Any]
+    status: VoteStatus = VoteStatus.ACTIVE
+    superseded_at: datetime | None = None
 
 
 class Result(DecisionTimeModel):
@@ -55,6 +73,7 @@ class Tournament(DecisionTimeModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
+    cool_off_ends_at: datetime | None = None
 
     @field_validator("name")
     @classmethod

@@ -173,4 +173,57 @@ test.describe('Score Tournament', () => {
     // Tournament should complete
     await expect(page.getByText('Winner')).toBeVisible({ timeout: 10000 });
   });
+
+  test('edit ballot after submitting', async ({ page, request }) => {
+    // 3-voter score tournament so submitting doesn't enter cool-off
+    const { tournament } = await setupActiveScoreTournament(
+      request, 'Edit Ballot Test', ['Alpha', 'Bravo', 'Charlie'],
+      { min_score: 1, max_score: 5, voter_labels: ['Alice', 'Bob', 'Carol'] },
+    );
+
+    // Alice visits the UI, submits 5/3/1, then sees ballot summary
+    await page.goto(`/tournaments/${tournament.id}/vote?voter=Alice`);
+    await expect(page.getByText('Rate each option')).toBeVisible({ timeout: 10000 });
+    const sliderInputs = page.locator('input[matSliderThumb]');
+    await sliderInputs.nth(0).fill('5');
+    await sliderInputs.nth(1).fill('3');
+    await sliderInputs.nth(2).fill('1');
+    await page.getByRole('button', { name: 'Submit Scores' }).click();
+
+    // Ballot summary screen should appear with the submitted scores
+    await expect(page.getByText('Your ballot is in')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'Edit my ballot' })).toBeVisible();
+
+    // Click "Edit my ballot" — returns to editable ballot pre-filled with the old values
+    await page.getByRole('button', { name: 'Edit my ballot' }).click();
+    await expect(page.getByText('Rate each option')).toBeVisible({ timeout: 10000 });
+
+    // The update button should show "Update Scores" label (not "Submit Scores")
+    await expect(page.getByRole('button', { name: 'Update Scores' })).toBeVisible();
+
+    // Change the first entry's score to 1 (was 5)
+    await sliderInputs.nth(0).fill('1');
+    await page.getByRole('button', { name: 'Update Scores' }).click();
+
+    // Back to ballot summary, submission count still says "1 of 3"
+    await expect(page.getByText('Your ballot is in')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('1 of 3 voters have submitted')).toBeVisible();
+  });
+
+  test('edit button hidden when allow_undo is false', async ({ page, request }) => {
+    const { tournament } = await setupActiveScoreTournament(
+      request, 'No Undo', ['Alpha', 'Bravo'],
+      { min_score: 1, max_score: 5, voter_labels: ['Alice', 'Bob'], allow_undo: false },
+    );
+
+    await page.goto(`/tournaments/${tournament.id}/vote?voter=Alice`);
+    const sliderInputs = page.locator('input[matSliderThumb]');
+    await sliderInputs.nth(0).fill('5');
+    await sliderInputs.nth(1).fill('1');
+    await page.getByRole('button', { name: 'Submit Scores' }).click();
+
+    await expect(page.getByText('Your ballot is in')).toBeVisible({ timeout: 10000 });
+    // "Edit my ballot" button must NOT be shown when allow_undo is false
+    await expect(page.getByRole('button', { name: 'Edit my ballot' })).toHaveCount(0);
+  });
 });

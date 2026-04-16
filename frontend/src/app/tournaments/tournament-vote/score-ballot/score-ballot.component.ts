@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { Component, effect, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -15,9 +15,24 @@ import { BallotContext } from '../../../models/vote-context.model';
 export class ScoreBallotComponent {
   context = input.required<BallotContext>();
   tournament = input.required<Tournament>();
+  /** If provided, pre-fills the sliders and flips the submit button to "Update". */
+  initialScores = input<Record<string, number> | null>(null);
   vote = output<Record<string, unknown>>();
 
   scores: Record<string, number> = {};
+
+  constructor() {
+    effect(() => {
+      const initial = this.initialScores();
+      if (initial) {
+        this.scores = { ...initial };
+      }
+    });
+  }
+
+  get isEditing(): boolean {
+    return this.initialScores() !== null;
+  }
 
   get entries(): { id: string; name: string }[] {
     return this.context().entries.map((e) => {

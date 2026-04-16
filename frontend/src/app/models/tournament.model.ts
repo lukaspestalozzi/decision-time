@@ -8,12 +8,16 @@ export interface TournamentEntry {
   option_snapshot: Record<string, unknown>;
 }
 
+export type VoteStatus = 'active' | 'superseded';
+
 export interface Vote {
   id: string;
   voter_label: string;
   round: number | null;
   submitted_at: string;
   payload: Record<string, unknown>;
+  status: VoteStatus;
+  superseded_at: string | null;
 }
 
 export interface RankingEntry {
@@ -45,4 +49,5 @@ export interface Tournament {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  cool_off_ends_at: string | null;
 }

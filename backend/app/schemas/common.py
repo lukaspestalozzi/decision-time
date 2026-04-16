@@ -51,6 +51,8 @@ class DecisionTimeModel(BaseModel):
         "completed_at",
         "submitted_at",
         "computed_at",
+        "cool_off_ends_at",
+        "superseded_at",
         check_fields=False,
     )
     @classmethod
@@ -65,9 +67,11 @@ class TournamentConfig(DecisionTimeModel):
 
     Owns `voter_labels`: the list of voter identities for the tournament.
     Count is always `len(voter_labels)`.
+    Owns `allow_undo`: whether voters may undo/revise their votes.
     """
 
     voter_labels: list[str] = Field(default_factory=lambda: ["default"])
+    allow_undo: bool = True
 
     @model_validator(mode="after")
     def _validate_voter_labels(self) -> Self:

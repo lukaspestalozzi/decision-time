@@ -49,7 +49,7 @@ jobs:
       - name: Build Docker image
         run: docker build -t decision-time .
       - name: Start container
-        run: docker run -d --name dt -p 8009:8009 decision-time
+        run: docker run -d --name dt -p 8009:8009 -e UNDO_COOL_OFF_SECONDS=0 decision-time
       - name: Wait for healthy
         run: |
           for i in $(seq 1 30); do
