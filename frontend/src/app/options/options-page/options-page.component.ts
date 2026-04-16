@@ -86,8 +86,17 @@ export class OptionsPageComponent implements OnInit {
     dialogRef.afterClosed().subscribe((result: BulkImportResult | undefined) => {
       if (!result) return;
       this.api.bulkCreateOptions({ names: result.names, tags: result.tags }).subscribe({
-        next: (created) => {
-          this.notify.showSuccess(`Created ${created.length} options.`);
+        next: ({ created, updated }) => {
+          const parts: string[] = [];
+          if (created.length) {
+            parts.push(`Created ${created.length} ${created.length === 1 ? 'option' : 'options'}`);
+          }
+          if (updated.length) {
+            parts.push(`updated ${updated.length} with new tags`);
+          }
+          this.notify.showSuccess(
+            parts.length ? `${parts.join(', ')}.` : 'No changes — all names already existed with those tags.',
+          );
           this.loadOptions();
         },
         error: () => this.notify.showError('Bulk import failed.'),

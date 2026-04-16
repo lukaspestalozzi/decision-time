@@ -601,7 +601,7 @@ optimistic concurrency version mismatch), `INTERNAL_ERROR`.
 |--------|---------------|--------------------------------------|------------------------------|
 | GET    | /options      | List all, with search/filter         | 200: Option[]                |
 | POST   | /options      | Create option                        | 201: Option                  |
-| POST   | /options/bulk | Create many from JSON array of names | 201: Option[] (created only) |
+| POST   | /options/bulk | Create many from JSON array of names | 201: {created: Option[], updated: Option[]} |
 | GET    | /options/{id} | Get one                              | 200: Option                  |
 | PUT    | /options/{id} | Update                               | 200: Option                  |
 | PATCH  | /options/bulk | Bulk add/remove tags                 | 200: Option[]                |
@@ -630,12 +630,16 @@ optimistic concurrency version mismatch), `INTERNAL_ERROR`.
 }
 ```
 
-- `tags` is optional. When provided, applied to all created options.
+- `tags` is optional. When provided, applied to all created options **and merged into the tag list of any
+  existing Option whose name matches** (tag union; duplicates ignored).
 - Blank/whitespace-only names are skipped.
 - Leading and trailing whitespace is trimmed.
-- Names that match an existing Option (exact match after trim) are skipped.
-- Duplicates within the request are also deduplicated.
-- Response: array of newly created Options only.
+- Names that match an existing Option (exact match after trim) are **not skipped**: the supplied tags are merged
+  into that Option's tag list. If the merge adds no new tags, the Option is reported in neither `created` nor
+  `updated`. If multiple existing Options share the same name, the merge is applied to each.
+- Duplicates within the request are deduplicated.
+- Response envelope: `{ "created": Option[], "updated": Option[] }`. `created` holds newly-created Options;
+  `updated` holds pre-existing Options whose tag list actually changed.
 
 **Bulk tag update (`PATCH /options/bulk`):**
 
@@ -1111,7 +1115,8 @@ These are explicitly out of scope but the architecture should not block them:
 Preserved for traceability.
 
 1. **Frontend styling**: Angular Material. ✅
-2. **Bulk option creation**: Paste names, trim, deduplicate. JSON body with optional tags. ✅
+2. **Bulk option creation**: Paste names, trim, deduplicate. JSON body with optional tags. Matching existing
+    names receive the supplied tags via union merge (no duplicates); response envelope splits created vs updated. ✅
 3. **Tournament state storage**: JSON files on disk. All tournament data in one file. ✅
 4. **Bracket seeding**: Random only in v1. ✅
 5. **Multi-ballot support**: `voter_count` in config for Score, Multivote, Condorcet. Auto-complete when all submitted.

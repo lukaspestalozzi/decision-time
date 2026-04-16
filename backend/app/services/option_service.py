@@ -3,7 +3,8 @@
 from uuid import UUID
 
 from app.repositories.options import OptionRepository
-from app.schemas.option import Option
+from app.schemas.common import normalize_tag
+from app.schemas.option import BulkCreateResult, Option
 
 
 class OptionService:
@@ -39,22 +40,46 @@ class OptionService:
     def delete_option(self, option_id: UUID) -> None:
         self._repo.delete(option_id)
 
-    def bulk_create(self, names: list[str], tags: list[str] | None = None) -> list[Option]:
-        """Create multiple options from a list of names.
+    def bulk_create(self, names: list[str], tags: list[str] | None = None) -> BulkCreateResult:
+        """Create options from names; merge supplied tags into any existing matches.
 
-        Skips blank names, duplicates within the request, and names matching existing options.
+        - Blank names and in-request duplicates are skipped.
+        - Unknown names produce fresh options with the supplied tags.
+        - Names matching an existing option: the supplied tags are unioned into
+          that option's tag list (duplicates ignored). Options whose tags are
+          unchanged afterwards are reported in neither `created` nor `updated`.
+        - If multiple existing options share the same name (permitted by the
+          domain model), the merge is applied to each of them.
         """
-        existing = {o.name for o in self._repo.list_all()}
+        supplied_tags = {nt for nt in (normalize_tag(t) for t in tags or []) if nt is not None}
+
+        existing_by_name: dict[str, list[Option]] = {}
+        for opt in self._repo.list_all():
+            existing_by_name.setdefault(opt.name, []).append(opt)
+
         seen: set[str] = set()
         created: list[Option] = []
+        updated: list[Option] = []
+
         for raw_name in names:
             name = raw_name.strip()
-            if not name or name in seen or name in existing:
+            if not name or name in seen:
                 continue
             seen.add(name)
-            option = Option(name=name, tags=tags or [])
+
+            matches = existing_by_name.get(name)
+            if matches:
+                for existing_opt in matches:
+                    current = set(existing_opt.tags)
+                    union = current | supplied_tags
+                    if union != current:
+                        updated.append(self._repo.update(existing_opt.id, tags=sorted(union)))
+                continue
+
+            option = Option(name=name, tags=sorted(supplied_tags))
             created.append(self._repo.create(option))
-        return created
+
+        return BulkCreateResult(created=created, updated=updated)
 
     def bulk_update_tags(
         self,

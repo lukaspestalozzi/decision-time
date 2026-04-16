@@ -67,9 +67,9 @@ def create_option(
 def bulk_create(
     body: BulkCreateRequest,
     service: OptionService = Depends(get_option_service),
-) -> list[dict[str, Any]]:
-    options = service.bulk_create(names=body.names, tags=body.tags)
-    return [o.model_dump(mode="json") for o in options]
+) -> dict[str, Any]:
+    result = service.bulk_create(names=body.names, tags=body.tags)
+    return result.model_dump(mode="json")
 
 
 @router.get("/options/{option_id}")

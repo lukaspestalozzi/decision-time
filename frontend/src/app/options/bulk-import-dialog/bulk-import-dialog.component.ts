@@ -74,9 +74,20 @@ export class BulkImportDialogComponent {
   }
 
   submit(): void {
+    // Commit any tag the user typed but didn't confirm with Enter/comma — otherwise
+    // clicking Import would silently drop it.
+    this.commitPendingTag();
     const names = this.parsedNames();
     if (names.length === 0) return;
     this.dialogRef.close({ names, tags: this.tags() } as BulkImportResult);
+  }
+
+  private commitPendingTag(): void {
+    const value = this.tagInput().trim();
+    if (value && !this.tags().includes(value)) {
+      this.tags.update((t) => [...t, value]);
+    }
+    this.tagInput.set('');
   }
 
   cancel(): void {

@@ -85,23 +85,51 @@ class TestOptionEndpoints:
 
 
 class TestBulkOperations:
-    def test_bulk_create_returns_created_only(self, client: TestClient) -> None:
+    def test_bulk_create_returns_created_and_updated_envelope(self, client: TestClient) -> None:
         resp = client.post("/api/v1/options/bulk", json={"names": ["A", "B", "C"]})
         assert resp.status_code == 201
-        assert len(resp.json()) == 3
+        body = resp.json()
+        assert list(body.keys()) == ["created", "updated"]
+        assert len(body["created"]) == 3
+        assert body["updated"] == []
 
-    def test_bulk_create_skips_duplicates(self, client: TestClient) -> None:
-        client.post("/api/v1/options", json={"name": "Existing"})
-        resp = client.post("/api/v1/options/bulk", json={"names": ["Existing", "New"]})
+    def test_bulk_create_merges_tags_into_existing(self, client: TestClient) -> None:
+        client.post("/api/v1/options", json={"name": "Existing", "tags": ["old"]})
+        resp = client.post(
+            "/api/v1/options/bulk",
+            json={"names": ["Existing", "New"], "tags": ["new-tag"]},
+        )
         assert resp.status_code == 201
-        assert len(resp.json()) == 1
-        assert resp.json()[0]["name"] == "New"
+        body = resp.json()
+        assert len(body["created"]) == 1
+        assert body["created"][0]["name"] == "New"
+        assert "new-tag" in body["created"][0]["tags"]
+        assert len(body["updated"]) == 1
+        assert body["updated"][0]["name"] == "Existing"
+        # Union: old tag preserved, new tag added, no duplicates.
+        assert sorted(body["updated"][0]["tags"]) == ["new-tag", "old"]
 
     def test_bulk_create_applies_tags(self, client: TestClient) -> None:
         resp = client.post("/api/v1/options/bulk", json={"names": ["A", "B"], "tags": ["baby-name"]})
         assert resp.status_code == 201
-        for opt in resp.json():
+        for opt in resp.json()["created"]:
             assert "baby-name" in opt["tags"]
+
+    def test_bulk_create_does_not_duplicate_existing_tag(self, client: TestClient) -> None:
+        # Existing option already has the supplied tag → no update recorded.
+        seeded = client.post("/api/v1/options", json={"name": "Luna", "tags": ["pet"]}).json()
+        resp = client.post("/api/v1/options/bulk", json={"names": ["Luna"], "tags": ["pet"]})
+        assert resp.status_code == 201
+        assert resp.json() == {"created": [], "updated": []}
+        # And the tag list was not duplicated on the stored record.
+        stored = client.get(f"/api/v1/options/{seeded['id']}").json()
+        assert stored["tags"] == ["pet"]
+
+    def test_bulk_create_merge_with_no_tags_is_noop_on_existing(self, client: TestClient) -> None:
+        client.post("/api/v1/options", json={"name": "Existing"})
+        resp = client.post("/api/v1/options/bulk", json={"names": ["Existing"]})
+        assert resp.status_code == 201
+        assert resp.json() == {"created": [], "updated": []}
 
     def test_bulk_update_tags_adds_and_removes(self, client: TestClient) -> None:
         a = client.post("/api/v1/options", json={"name": "A", "tags": ["old"]}).json()

@@ -31,3 +31,15 @@ class Option(DecisionTimeModel):
     def normalize_tags(cls, v: list[str]) -> list[str]:
         normalized = [normalize_tag(t) for t in v]
         return sorted(set(t for t in normalized if t is not None))
+
+
+class BulkCreateResult(DecisionTimeModel):
+    """Outcome of a bulk-create/import request.
+
+    `created` holds freshly-created options; `updated` holds pre-existing options
+    whose tag list was merged with the bulk tags (at least one new tag added).
+    Options that already had every supplied tag are omitted entirely.
+    """
+
+    created: list[Option] = Field(default_factory=list)
+    updated: list[Option] = Field(default_factory=list)

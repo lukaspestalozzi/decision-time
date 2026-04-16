@@ -37,8 +37,12 @@ export class ApiService {
     return this.http.delete<void>(`${this.base}/options/${id}`);
   }
 
-  bulkCreateOptions(body: { names: string[]; tags?: string[] }): Observable<Option[]> {
-    return this.http.post<Option[]>(`${this.base}/options/bulk`, body);
+  bulkCreateOptions(
+    body: { names: string[]; tags?: string[] },
+  ): Observable<{ created: Option[]; updated: Option[] }> {
+    return this.http.post<{ created: Option[]; updated: Option[] }>(
+      `${this.base}/options/bulk`, body,
+    );
   }
 
   bulkUpdateTags(body: { option_ids: string[]; add_tags?: string[]; remove_tags?: string[] }): Observable<Option[]> {
