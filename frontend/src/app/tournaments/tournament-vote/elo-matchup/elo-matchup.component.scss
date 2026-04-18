@@ -1,0 +1,38 @@
+.matchup-header {
+  text-align: center;
+  margin-bottom: 24px;
+  h2 { margin: 0; }
+  p { color: rgba(0, 0, 0, 0.6); margin-bottom: 8px; }
+}
+
+.matchup-cards {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.entry-card {
+  flex: 1;
+  max-width: 300px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  text-align: center;
+  padding: 32px 16px;
+
+  &:hover { transform: translateY(-2px); }
+  &:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+}
+
+.rating {
+  margin-top: 12px;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.54);
+  font-variant-numeric: tabular-nums;
+}
+
+.vs {
+  font-size: 24px;
+  font-weight: bold;
+  color: rgba(0, 0, 0, 0.4);
+}

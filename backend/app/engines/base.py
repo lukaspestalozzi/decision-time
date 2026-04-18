@@ -33,6 +33,17 @@ class CondorcetMatchupContext(BaseModel):
     total_matchups: int
 
 
+class EloMatchupContext(BaseModel):
+    type: Literal["elo_matchup"] = "elo_matchup"
+    matchup_id: str
+    entry_a: dict[str, Any]
+    entry_b: dict[str, Any]
+    matchup_number: int
+    total_matchups: int
+    round_number: int
+    rounds_per_pair: int
+
+
 class BallotContext(BaseModel):
     type: Literal["ballot"] = "ballot"
     entries: list[dict[str, Any]]
@@ -66,6 +77,7 @@ class CompletedContext(BaseModel):
 VoteContext = (
     BracketMatchupContext
     | CondorcetMatchupContext
+    | EloMatchupContext
     | BallotContext
     | SwissMatchupContext
     | AlreadyVotedContext

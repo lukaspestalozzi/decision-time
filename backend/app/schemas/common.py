@@ -32,6 +32,7 @@ class TournamentMode(StrEnum):
     MULTIVOTE = "multivote"
     CONDORCET = "condorcet"
     SWISS = "swiss"
+    ELO = "elo"
 
 
 class TournamentStatus(StrEnum):
@@ -134,12 +135,47 @@ class SwissConfig(TournamentConfig):
         return self
 
 
+MAX_ROUNDS_PER_PAIR = 20
+MAX_K_FACTOR = 200.0
+
+
+class EloConfig(TournamentConfig):
+    """Config for the ELO tournament mode.
+
+    All pairs of options play `rounds_per_pair` matchups. Ratings update after
+    each matchup using chess-style Elo with the given `k_factor`. `voter_shuffle_seeds`
+    is populated at activation time so `initialize` is a pure function of config
+    (guarantees replay determinism).
+    """
+
+    rounds_per_pair: int = 3
+    k_factor: float = 32.0
+    initial_rating: float = 1000.0
+    shuffle_order: bool = True
+    voter_shuffle_seeds: dict[str, int] | None = None
+
+    @model_validator(mode="after")
+    def _validate_elo_params(self) -> Self:
+        if self.rounds_per_pair < 1:
+            raise ValueError("rounds_per_pair must be at least 1")
+        if self.rounds_per_pair > MAX_ROUNDS_PER_PAIR:
+            raise ValueError(f"rounds_per_pair must be at most {MAX_ROUNDS_PER_PAIR}")
+        if self.k_factor <= 0:
+            raise ValueError("k_factor must be positive")
+        if self.k_factor > MAX_K_FACTOR:
+            raise ValueError(f"k_factor must be at most {MAX_K_FACTOR}")
+        if self.initial_rating < 0:
+            raise ValueError("initial_rating must be non-negative")
+        return self
+
+
 CONFIG_CLASSES: dict[TournamentMode, type[TournamentConfig]] = {
     TournamentMode.BRACKET: BracketConfig,
     TournamentMode.SCORE: ScoreConfig,
     TournamentMode.MULTIVOTE: MultivoteConfig,
     TournamentMode.CONDORCET: CondorcetConfig,
     TournamentMode.SWISS: SwissConfig,
+    TournamentMode.ELO: EloConfig,
 }
 
 
