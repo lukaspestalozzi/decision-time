@@ -573,6 +573,88 @@ always selected.
 **Voters:** One ballot per voter label. Multiple voters vote concurrently, each working through their own set of
 matchups independently. Tournament completes immediately when all voters finish all matchups.
 
+### 3.5 Swiss System
+
+**Concept:** Options are paired over a fixed number of rounds. Each round pairs options with similar running scores
+(score-group pairing), avoiding rematches when possible. Win = 1 point, Draw = 0.5 each, Bye = 1 point. Highest total
+points wins.
+
+**Config (all optional, defaults shown):**
+
+```json
+{
+  "total_rounds": null,
+  "allow_draws": true,
+  "shuffle_seed": true
+}
+```
+
+If `total_rounds` is `null`, it defaults to `ceil(log2(N))` where N is the number of entries.
+
+**Vote payload:**
+
+```json
+{
+  "matchup_id": "uuid",
+  "result": "a_wins" | "b_wins" | "draw"
+}
+```
+
+`"draw"` is only accepted when `allow_draws` is `true`.
+
+**State schema:**
+
+```json
+{
+  "entry_ids": ["uuid", ...],
+  "current_round": 1,
+  "total_rounds": 3,
+  "allow_draws": true,
+  "rounds": [
+    {
+      "round_number": 1,
+      "matchups": [
+        {
+          "matchup_id": "uuid",
+          "entry_a_id": "uuid",
+          "entry_b_id": "uuid",
+          "result": null,
+          "is_bye": false
+        }
+      ]
+    }
+  ],
+  "standings": {
+    "entry_id": {
+      "points": 0.0,
+      "wins": 0,
+      "draws": 0,
+      "losses": 0,
+      "byes": 0,
+      "opponents": ["entry_id", ...],
+      "results_vs": {"opp_id": "win" | "loss" | "draw"}
+    }
+  }
+}
+```
+
+**Behavior:**
+
+- Round 1 pairings are built by (optionally) shuffling entries with a deterministic seed derived from their IDs, then
+  pairing adjacent positions.
+- Subsequent rounds use Dutch-style score-group pairing: entries are sorted by points descending and paired greedily
+  while avoiding rematches; if no non-opponent partner is available a rematch is permitted as a last resort.
+- If the entry count is odd, one entry receives a bye each round. The bye goes to the lowest-scored entry that has not
+  yet received a bye (ties broken by entry_id). A bye awards 1 point and is applied immediately on round build.
+- Matchup IDs are deterministic (UUIDv5 of round number + participant IDs), so undo replays reproduce identical state.
+- Each round must be fully resolved before the next is paired.
+- `get_vote_context` returns the first undecided matchup in the current round along with a live standings snapshot so
+  the UI can render a running table.
+- Final ranking is by points, with Buchholz (sum of opponents' points) as the primary tiebreaker and head-to-head
+  points as secondary. Entries still tied after both tiebreakers share a rank and are all returned as winners.
+
+**Voters:** Single ballot. `voter_labels` is hardcoded to `["default"]`. No `voter_count` config.
+
 ---
 
 ## 4. API Design
@@ -1095,7 +1177,7 @@ Bulk import/tags, search/filter, Dockerfile, docker-compose, E2E tests (Playwrig
 These are explicitly out of scope but the architecture should not block them:
 
 - **Authentication**: User accounts, shared tournaments via link.
-- **Additional tournament modes**: Ranked Choice (IRV), STAR voting, Swiss system.
+- **Additional tournament modes**: Ranked Choice (IRV), STAR voting.
 - **Option metadata**: Images, links, custom fields.
 - **Import/export**: CSV import for options, JSON export for tournaments.
 - **Tournament templates**: Save a tournament config for reuse.

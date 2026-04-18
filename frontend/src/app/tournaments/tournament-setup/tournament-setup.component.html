@@ -325,6 +325,32 @@
                 </mat-form-field>
               </div>
             }
+
+            @case ('swiss') {
+              <div class="config-form">
+                <mat-form-field appearance="outline">
+                  <mat-label>Total Rounds</mat-label>
+                  <input matInput
+                         type="number"
+                         min="1"
+                         [value]="swissTotalRounds() ?? ''"
+                         (input)="swissTotalRounds.set($any($event.target).value ? +$any($event.target).value : null)">
+                  <mat-hint>Leave empty to auto-calculate as ceil(log&#8322;(N)).</mat-hint>
+                </mat-form-field>
+
+                <mat-slide-toggle [checked]="swissAllowDraws()"
+                                  (change)="swissAllowDraws.set($event.checked)">
+                  Allow draws
+                </mat-slide-toggle>
+                <p class="config-hint">Draws split a point between both entries (0.5 each).</p>
+
+                <mat-slide-toggle [checked]="swissShuffleSeed()"
+                                  (change)="swissShuffleSeed.set($event.checked)">
+                  Shuffle round-1 pairings
+                </mat-slide-toggle>
+                <p class="config-hint">Randomize initial pairing order (deterministic per tournament).</p>
+              </div>
+            }
           }
         }
 

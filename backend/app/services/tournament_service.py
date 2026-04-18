@@ -9,6 +9,7 @@ from app.engines.bracket import BracketEngine
 from app.engines.condorcet import CondorcetEngine
 from app.engines.multivote import MultivoteEngine
 from app.engines.score import ScoreEngine
+from app.engines.swiss import SwissEngine
 from app.exceptions import InvalidStateError, ValidationError
 from app.repositories.options import OptionRepository
 from app.repositories.tournaments import TournamentRepository
@@ -33,6 +34,7 @@ class TournamentService:
             TournamentMode.SCORE: ScoreEngine(),
             TournamentMode.MULTIVOTE: MultivoteEngine(),
             TournamentMode.CONDORCET: CondorcetEngine(),
+            TournamentMode.SWISS: SwissEngine(),
         }
         engine = engines.get(mode)
         if engine is None:

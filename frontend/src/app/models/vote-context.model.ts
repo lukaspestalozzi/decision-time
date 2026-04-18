@@ -26,6 +26,28 @@ export interface BallotContext {
   ballots_required: number;
 }
 
+export interface SwissStandingEntry {
+  rank: number;
+  entry_id: string;
+  points: number;
+  wins: number;
+  draws: number;
+  losses: number;
+}
+
+export interface SwissMatchupContext {
+  type: 'swiss_matchup';
+  matchup_id: string;
+  entry_a: Record<string, unknown>;
+  entry_b: Record<string, unknown>;
+  round: number;
+  total_rounds: number;
+  match_number: number;
+  matches_in_round: number;
+  allow_draws: boolean;
+  standings: SwissStandingEntry[];
+}
+
 export interface AlreadyVotedContext {
   type: 'already_voted';
 }
@@ -39,5 +61,6 @@ export type VoteContext =
   | BracketMatchupContext
   | CondorcetMatchupContext
   | BallotContext
+  | SwissMatchupContext
   | AlreadyVotedContext
   | CompletedContext;

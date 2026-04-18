@@ -1,0 +1,48 @@
+<div class="matchup-header">
+  <h2>Round {{ context().round }} of {{ context().total_rounds }}</h2>
+  <p>Match {{ context().match_number }} of {{ context().matches_in_round }}</p>
+</div>
+
+<div class="matchup-cards">
+  <mat-card (click)="pick('a_wins')" class="entry-card">
+    <mat-card-header>
+      <mat-card-title>{{ getEntryName(context().entry_a) }}</mat-card-title>
+    </mat-card-header>
+  </mat-card>
+
+  @if (context().allow_draws) {
+    <button mat-stroked-button class="draw-button" (click)="pick('draw')">Draw</button>
+  } @else {
+    <span class="vs">VS</span>
+  }
+
+  <mat-card (click)="pick('b_wins')" class="entry-card">
+    <mat-card-header>
+      <mat-card-title>{{ getEntryName(context().entry_b) }}</mat-card-title>
+    </mat-card-header>
+  </mat-card>
+</div>
+
+<section class="standings">
+  <h3>Current Standings</h3>
+  <table mat-table [dataSource]="standingsRows()">
+    <ng-container matColumnDef="rank">
+      <th mat-header-cell *matHeaderCellDef>#</th>
+      <td mat-cell *matCellDef="let row">{{ row.rank }}</td>
+    </ng-container>
+    <ng-container matColumnDef="name">
+      <th mat-header-cell *matHeaderCellDef>Option</th>
+      <td mat-cell *matCellDef="let row">{{ row.name }}</td>
+    </ng-container>
+    <ng-container matColumnDef="points">
+      <th mat-header-cell *matHeaderCellDef>Pts</th>
+      <td mat-cell *matCellDef="let row">{{ row.points }}</td>
+    </ng-container>
+    <ng-container matColumnDef="record">
+      <th mat-header-cell *matHeaderCellDef>W-D-L</th>
+      <td mat-cell *matCellDef="let row">{{ row.wins }}-{{ row.draws }}-{{ row.losses }}</td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+  </table>
+</section>

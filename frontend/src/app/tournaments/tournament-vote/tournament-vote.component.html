@@ -17,6 +17,9 @@
       @case ('condorcet_matchup') {
         <app-condorcet-matchup [context]="$any(voteContext())" [tournament]="tournament()!" (vote)="onVote($event)" />
       }
+      @case ('swiss_matchup') {
+        <app-swiss-matchup [context]="$any(voteContext())" [tournament]="tournament()!" (vote)="onVote($event)" />
+      }
       @case ('ballot') {
         @if ($any(voteContext()).ballot_type === 'score') {
           <app-score-ballot

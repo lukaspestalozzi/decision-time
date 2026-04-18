@@ -41,6 +41,19 @@ class BallotContext(BaseModel):
     ballots_required: int
 
 
+class SwissMatchupContext(BaseModel):
+    type: Literal["swiss_matchup"] = "swiss_matchup"
+    matchup_id: str
+    entry_a: dict[str, Any]
+    entry_b: dict[str, Any]
+    round: int
+    total_rounds: int
+    match_number: int
+    matches_in_round: int
+    allow_draws: bool
+    standings: list[dict[str, Any]]
+
+
 class AlreadyVotedContext(BaseModel):
     type: Literal["already_voted"] = "already_voted"
 
@@ -50,7 +63,14 @@ class CompletedContext(BaseModel):
     result: dict[str, Any]
 
 
-VoteContext = BracketMatchupContext | CondorcetMatchupContext | BallotContext | AlreadyVotedContext | CompletedContext
+VoteContext = (
+    BracketMatchupContext
+    | CondorcetMatchupContext
+    | BallotContext
+    | SwissMatchupContext
+    | AlreadyVotedContext
+    | CompletedContext
+)
 
 
 # --- Abstract Engine ---

@@ -31,6 +31,7 @@ class TournamentMode(StrEnum):
     SCORE = "score"
     MULTIVOTE = "multivote"
     CONDORCET = "condorcet"
+    SWISS = "swiss"
 
 
 class TournamentStatus(StrEnum):
@@ -115,11 +116,30 @@ class CondorcetConfig(TournamentConfig):
     pass
 
 
+class SwissConfig(TournamentConfig):
+    total_rounds: int | None = None
+    allow_draws: bool = True
+    shuffle_seed: bool = True
+
+    @model_validator(mode="after")
+    def _validate_swiss_single_voter(self) -> Self:
+        if len(self.voter_labels) != 1:
+            raise ValueError("swiss mode supports only a single voter")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_rounds(self) -> Self:
+        if self.total_rounds is not None and self.total_rounds < 1:
+            raise ValueError("total_rounds must be >= 1")
+        return self
+
+
 CONFIG_CLASSES: dict[TournamentMode, type[TournamentConfig]] = {
     TournamentMode.BRACKET: BracketConfig,
     TournamentMode.SCORE: ScoreConfig,
     TournamentMode.MULTIVOTE: MultivoteConfig,
     TournamentMode.CONDORCET: CondorcetConfig,
+    TournamentMode.SWISS: SwissConfig,
 }
 
 
