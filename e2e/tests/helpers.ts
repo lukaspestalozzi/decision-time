@@ -307,6 +307,63 @@ export async function completeBracketTournament(
 }
 
 /**
+ * Create a fully activated ELO tournament.
+ * Returns { tournament, options }.
+ */
+export async function setupActiveEloTournament(
+  request: APIRequestContext,
+  tournamentName: string,
+  optionNames: string[],
+  config: {
+    rounds_per_pair?: number;
+    k_factor?: number;
+    initial_rating?: number;
+    voter_labels?: string[];
+  } = {},
+): Promise<{ tournament: any; options: any[] }> {
+  const options = await createOptions(request, optionNames);
+  let tournament = await createTournament(request, tournamentName, 'elo');
+  tournament = await setTournamentOptions(
+    request, tournament.id, tournament.version,
+    options.map((o: any) => o.id),
+  );
+  tournament = await setTournamentConfig(
+    request, tournament.id, tournament.version,
+    { rounds_per_pair: 1, k_factor: 32.0, initial_rating: 1000.0, voter_labels: ['default'], ...config },
+  );
+  tournament = await activateTournament(request, tournament.id, tournament.version);
+  return { tournament, options };
+}
+
+/**
+ * Complete an ELO tournament for a given voter by voting all their matchups via API.
+ * Always picks entry_a as the winner.
+ */
+export async function completeEloVoter(
+  request: APIRequestContext,
+  tournamentId: string,
+  voterLabel: string,
+  startVersion: number,
+): Promise<any> {
+  let version = startVersion;
+  for (;;) {
+    const ctx = await getVoteContext(request, tournamentId, voterLabel);
+    if (ctx.type === 'completed' || ctx.type === 'already_voted') {
+      const res = await request.get(`${API}/tournaments/${tournamentId}`);
+      return res.json();
+    }
+    if (ctx.type !== 'elo_matchup') {
+      throw new Error(`Unexpected context type for elo: ${ctx.type}`);
+    }
+    const updated = await submitVote(request, tournamentId, version, voterLabel, {
+      matchup_id: ctx.matchup_id,
+      winner_entry_id: ctx.entry_a.id,
+    });
+    version = updated.version;
+  }
+}
+
+/**
  * Complete a condorcet tournament for a given voter by voting all their matchups via API.
  * Always picks entry_a as the winner.
  */
