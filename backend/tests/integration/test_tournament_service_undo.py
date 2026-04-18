@@ -183,6 +183,113 @@ class TestUndoVoteContextAfterUndo:
         assert ctx.type == "ballot"
 
 
+def _create_active_elo(
+    tournament_service: TournamentService,
+    option_repo: OptionRepository,
+    voter_labels: list[str],
+    *,
+    rounds_per_pair: int = 2,
+) -> Tournament:
+    options = _create_score_options(option_repo, ["A", "B", "C"])
+    t = tournament_service.create_tournament("elo-test", TournamentMode.ELO)
+    t = tournament_service.update_tournament(
+        t.id,
+        version=t.version,
+        selected_option_ids=[o.id for o in options],
+        config={
+            "rounds_per_pair": rounds_per_pair,
+            "k_factor": 32.0,
+            "initial_rating": 1000.0,
+            "voter_labels": voter_labels,
+        },
+    )
+    return tournament_service.activate_tournament(t.id, version=t.version)
+
+
+class TestEloActivation:
+    def test_activate_populates_shuffle_seeds(
+        self, tournament_service: TournamentService, option_repo: OptionRepository
+    ) -> None:
+        t = _create_active_elo(tournament_service, option_repo, ["Alice", "Bob"])
+        seeds = t.config.get("voter_shuffle_seeds")
+        assert isinstance(seeds, dict)
+        assert set(seeds.keys()) == {"Alice", "Bob"}
+        assert all(isinstance(s, int) for s in seeds.values())
+
+    def test_activate_generates_expected_matchup_count(
+        self, tournament_service: TournamentService, option_repo: OptionRepository
+    ) -> None:
+        t = _create_active_elo(tournament_service, option_repo, ["Alice"], rounds_per_pair=3)
+        # 3 entries * C(3,2)=3 pairs * 3 rounds = 9 matchups
+        assert len(t.state["matchups"]) == 9
+
+
+class TestUndoElo:
+    def test_undo_reverts_rating_table(
+        self, tournament_service: TournamentService, option_repo: OptionRepository
+    ) -> None:
+        t = _create_active_elo(tournament_service, option_repo, ["Alice"], rounds_per_pair=1)
+        ctx = tournament_service.get_vote_context(t.id, "Alice")
+        assert ctx.type == "elo_matchup"
+        winner = ctx.entry_a["id"]
+        t = tournament_service.submit_vote(
+            t.id, t.version, "Alice", {"matchup_id": ctx.matchup_id, "winner_entry_id": winner}
+        )
+        ratings_before_undo = dict(t.state["voter_ratings"]["Alice"])
+        assert ratings_before_undo[winner] > 1000.0
+
+        t = tournament_service.undo_vote(t.id, t.version, "Alice")
+        assert all(r == 1000.0 for r in t.state["voter_ratings"]["Alice"].values())
+
+    def test_multi_voter_undo_isolated(
+        self, tournament_service: TournamentService, option_repo: OptionRepository
+    ) -> None:
+        t = _create_active_elo(tournament_service, option_repo, ["Alice", "Bob"], rounds_per_pair=2)
+        ctx_a = tournament_service.get_vote_context(t.id, "Alice")
+        assert ctx_a.type == "elo_matchup"
+        t = tournament_service.submit_vote(
+            t.id,
+            t.version,
+            "Alice",
+            {"matchup_id": ctx_a.matchup_id, "winner_entry_id": ctx_a.entry_a["id"]},
+        )
+        ctx_b = tournament_service.get_vote_context(t.id, "Bob")
+        assert ctx_b.type == "elo_matchup"
+        t = tournament_service.submit_vote(
+            t.id,
+            t.version,
+            "Bob",
+            {"matchup_id": ctx_b.matchup_id, "winner_entry_id": ctx_b.entry_a["id"]},
+        )
+        bob_ratings_before = dict(t.state["voter_ratings"]["Bob"])
+
+        t = tournament_service.undo_vote(t.id, t.version, "Alice")
+        # Alice's ratings reset; Bob's untouched.
+        assert all(r == 1000.0 for r in t.state["voter_ratings"]["Alice"].values())
+        assert t.state["voter_ratings"]["Bob"] == bob_ratings_before
+
+    def test_full_flow_completes_with_ranking(
+        self, tournament_service: TournamentService, option_repo: OptionRepository
+    ) -> None:
+        t = _create_active_elo(tournament_service, option_repo, ["Alice"], rounds_per_pair=2)
+        while True:
+            ctx = tournament_service.get_vote_context(t.id, "Alice")
+            if ctx.type != "elo_matchup":
+                break
+            t = tournament_service.submit_vote(
+                t.id,
+                t.version,
+                "Alice",
+                {"matchup_id": ctx.matchup_id, "winner_entry_id": ctx.entry_a["id"]},
+            )
+        assert t.status == TournamentStatus.COMPLETED
+        assert t.result is not None
+        assert len(t.result.ranking) == 3
+        # Ranking sorted by mean_rating descending
+        ratings = [row["mean_rating"] for row in t.result.ranking]
+        assert ratings == sorted(ratings, reverse=True)
+
+
 class TestUndoOnCompletedTournament:
     def test_last_vote_completes_tournament_immediately(
         self, tournament_service: TournamentService, option_repo: OptionRepository

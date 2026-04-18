@@ -1,4 +1,4 @@
-export type TournamentMode = 'bracket' | 'score' | 'multivote' | 'condorcet' | 'swiss';
+export type TournamentMode = 'bracket' | 'score' | 'multivote' | 'condorcet' | 'swiss' | 'elo';
 export type TournamentStatus = 'draft' | 'active' | 'completed' | 'cancelled';
 
 export interface TournamentEntry {

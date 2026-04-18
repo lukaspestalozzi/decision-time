@@ -18,6 +18,17 @@ export interface CondorcetMatchupContext {
   total_matchups: number;
 }
 
+export interface EloMatchupContext {
+  type: 'elo_matchup';
+  matchup_id: string;
+  entry_a: { id: string; rating: number } & Record<string, unknown>;
+  entry_b: { id: string; rating: number } & Record<string, unknown>;
+  matchup_number: number;
+  total_matchups: number;
+  round_number: number;
+  rounds_per_pair: number;
+}
+
 export interface BallotContext {
   type: 'ballot';
   entries: Record<string, unknown>[];
@@ -60,6 +71,7 @@ export interface CompletedContext {
 export type VoteContext =
   | BracketMatchupContext
   | CondorcetMatchupContext
+  | EloMatchupContext
   | BallotContext
   | SwissMatchupContext
   | AlreadyVotedContext

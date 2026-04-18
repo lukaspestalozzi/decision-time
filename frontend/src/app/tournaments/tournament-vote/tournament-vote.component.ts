@@ -9,6 +9,7 @@ import { VoterSelectorComponent } from '../../shared/voter-selector/voter-select
 import { BracketMatchupComponent } from './bracket-matchup/bracket-matchup.component';
 import { CondorcetMatchupComponent } from './condorcet-matchup/condorcet-matchup.component';
 import { SwissMatchupComponent } from './swiss-matchup/swiss-matchup.component';
+import { EloMatchupComponent } from './elo-matchup/elo-matchup.component';
 import { ScoreBallotComponent } from './score-ballot/score-ballot.component';
 import { MultivoteBallotComponent } from './multivote-ballot/multivote-ballot.component';
 import { AlreadyVotedComponent } from './already-voted/already-voted.component';
@@ -23,6 +24,7 @@ import { TournamentResultComponent } from '../tournament-result/tournament-resul
     BracketMatchupComponent,
     CondorcetMatchupComponent,
     SwissMatchupComponent,
+    EloMatchupComponent,
     ScoreBallotComponent,
     MultivoteBallotComponent,
     AlreadyVotedComponent,

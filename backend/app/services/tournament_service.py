@@ -1,5 +1,6 @@
 """Tournament service — lifecycle orchestration between repos and engines."""
 
+import secrets
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -7,6 +8,7 @@ from uuid import UUID
 from app.engines.base import TournamentEngine, VoteContext
 from app.engines.bracket import BracketEngine
 from app.engines.condorcet import CondorcetEngine
+from app.engines.elo import EloEngine
 from app.engines.multivote import MultivoteEngine
 from app.engines.score import ScoreEngine
 from app.engines.swiss import SwissEngine
@@ -35,6 +37,7 @@ class TournamentService:
             TournamentMode.MULTIVOTE: MultivoteEngine(),
             TournamentMode.CONDORCET: CondorcetEngine(),
             TournamentMode.SWISS: SwissEngine(),
+            TournamentMode.ELO: EloEngine(),
         }
         engine = engines.get(mode)
         if engine is None:
@@ -117,6 +120,11 @@ class TournamentService:
         errors = engine.validate_config(tournament.config)
         if errors:
             raise ValidationError(f"Invalid config: {'; '.join(errors)}")
+
+        # ELO: seed per-voter shuffle RNGs at activation so replay_state is deterministic.
+        if tournament.mode == TournamentMode.ELO and not tournament.config.get("voter_shuffle_seeds"):
+            voter_labels = tournament.config.get("voter_labels", ["default"])
+            tournament.config["voter_shuffle_seeds"] = {label: secrets.randbits(63) for label in voter_labels}
 
         initial_state = engine.initialize(entries, tournament.config)
 

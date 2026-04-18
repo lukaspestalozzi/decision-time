@@ -613,3 +613,107 @@ class TestUndoEndpoint:
         )
         tournament = resp.json()["tournament"]
         assert tournament["status"] == "active"
+
+
+class TestEloAPI:
+    def _setup_active_elo(
+        self,
+        client: TestClient,
+        voter_labels: list[str] | None = None,
+        rounds_per_pair: int = 2,
+        num_options: int = 3,
+    ) -> tuple[str, int]:
+        options = _create_options(client, num_options)
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "elo"})
+        tid = create.json()["id"]
+        config: dict = {"rounds_per_pair": rounds_per_pair, "k_factor": 32.0, "initial_rating": 1000.0}
+        if voter_labels is not None:
+            config["voter_labels"] = voter_labels
+        client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={
+                "version": 1,
+                "selected_option_ids": [o["id"] for o in options],
+                "config": config,
+            },
+        )
+        resp = client.post(f"/api/v1/tournaments/{tid}/activate", json={"version": 2})
+        return tid, resp.json()["version"]
+
+    def test_create_elo_tournament_echoes_defaults(self, client: TestClient) -> None:
+        resp = client.post("/api/v1/tournaments", json={"name": "T", "mode": "elo"})
+        assert resp.status_code == 201
+        cfg = resp.json()["config"]
+        assert cfg["rounds_per_pair"] == 3
+        assert cfg["k_factor"] == 32.0
+        assert cfg["initial_rating"] == 1000.0
+        assert cfg["shuffle_order"] is True
+
+    def test_update_elo_config_persists(self, client: TestClient) -> None:
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "elo"})
+        tid = create.json()["id"]
+        resp = client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={
+                "version": 1,
+                "config": {"rounds_per_pair": 5, "k_factor": 24.0, "initial_rating": 1500.0},
+            },
+        )
+        assert resp.status_code == 200
+        cfg = resp.json()["config"]
+        assert cfg["rounds_per_pair"] == 5
+        assert cfg["k_factor"] == 24.0
+        assert cfg["initial_rating"] == 1500.0
+
+    def test_invalid_rounds_per_pair_returns_422(self, client: TestClient) -> None:
+        create = client.post("/api/v1/tournaments", json={"name": "T", "mode": "elo"})
+        tid = create.json()["id"]
+        resp = client.put(
+            f"/api/v1/tournaments/{tid}",
+            json={"version": 1, "config": {"rounds_per_pair": 0}},
+        )
+        assert resp.status_code == 422
+
+    def test_activate_generates_matchups_and_seeds(self, client: TestClient) -> None:
+        tid, _ = self._setup_active_elo(client, rounds_per_pair=3, num_options=4)
+        t = client.get(f"/api/v1/tournaments/{tid}").json()
+        # 4 entries * C(4,2)=6 pairs * 3 rounds = 18 matchups
+        assert len(t["state"]["matchups"]) == 18
+        assert t["config"]["voter_shuffle_seeds"] is not None
+
+    def test_vote_context_returns_elo_matchup(self, client: TestClient) -> None:
+        tid, _ = self._setup_active_elo(client, voter_labels=["Alice", "Bob"])
+        resp = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "Alice"})
+        assert resp.status_code == 200
+        ctx = resp.json()
+        assert ctx["type"] == "elo_matchup"
+        assert "rating" in ctx["entry_a"]
+        assert "rating" in ctx["entry_b"]
+        assert ctx["entry_a"]["rating"] == 1000.0
+        assert ctx["round_number"] >= 1
+        assert ctx["rounds_per_pair"] == 2
+
+    def test_full_elo_flow_completes_with_ranking(self, client: TestClient) -> None:
+        tid, version = self._setup_active_elo(client, rounds_per_pair=2)
+        while True:
+            ctx = client.get(f"/api/v1/tournaments/{tid}/vote-context", params={"voter": "default"}).json()
+            if ctx["type"] != "elo_matchup":
+                break
+            resp = client.post(
+                f"/api/v1/tournaments/{tid}/vote",
+                json={
+                    "version": version,
+                    "voter_label": "default",
+                    "payload": {
+                        "matchup_id": ctx["matchup_id"],
+                        "winner_entry_id": ctx["entry_a"]["id"],
+                    },
+                },
+            )
+            assert resp.status_code == 200
+            version = resp.json()["version"]
+        t = client.get(f"/api/v1/tournaments/{tid}").json()
+        assert t["status"] == "completed"
+        assert t["result"] is not None
+        assert len(t["result"]["ranking"]) == 3
+        assert "mean_rating" in t["result"]["ranking"][0]

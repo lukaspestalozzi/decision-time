@@ -1,0 +1,26 @@
+<div class="matchup-header">
+  <h2>Pairwise Comparison</h2>
+  <p>Matchup {{ context().matchup_number }} of {{ context().total_matchups }}
+    &nbsp;&middot;&nbsp; Round {{ context().round_number }} of {{ context().rounds_per_pair }}</p>
+  <mat-progress-bar mode="determinate" [value]="progress"></mat-progress-bar>
+</div>
+
+<div class="matchup-cards">
+  <mat-card
+    (click)="select(context().entry_a.id)"
+    class="entry-card"
+  >
+    <mat-card-header><mat-card-title>{{ getEntryName(context().entry_a) }}</mat-card-title></mat-card-header>
+    <div class="rating">Elo: {{ context().entry_a.rating | number: '1.0-0' }}</div>
+  </mat-card>
+
+  <span class="vs">VS</span>
+
+  <mat-card
+    (click)="select(context().entry_b.id)"
+    class="entry-card"
+  >
+    <mat-card-header><mat-card-title>{{ getEntryName(context().entry_b) }}</mat-card-title></mat-card-header>
+    <div class="rating">Elo: {{ context().entry_b.rating | number: '1.0-0' }}</div>
+  </mat-card>
+</div>

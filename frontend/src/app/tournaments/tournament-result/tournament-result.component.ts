@@ -68,6 +68,13 @@ export class TournamentResultComponent implements OnInit {
   }
 
   private getRankDetail(r: Record<string, unknown>): string {
+    if ('mean_rating' in r) {
+      const rating = Math.round(r['mean_rating'] as number);
+      if ('wins' in r && 'losses' in r) {
+        return `Rating: ${rating} (W: ${r['wins']}, L: ${r['losses']})`;
+      }
+      return `Rating: ${rating}`;
+    }
     if ('average_score' in r) return `Avg: ${(r['average_score'] as number).toFixed(2)}`;
     if ('total_votes' in r) return `Votes: ${r['total_votes']}`;
     if ('wins' in r) return `Wins: ${r['wins']}`;

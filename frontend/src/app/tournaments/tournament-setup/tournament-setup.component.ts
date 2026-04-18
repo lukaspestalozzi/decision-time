@@ -138,10 +138,16 @@ export class TournamentSetupComponent implements OnInit {
   swissAllowDraws = signal(true);
   swissShuffleSeed = signal(true);
 
+  // ELO config
+  eloVoterLabels = signal<string[]>(['Voter 1']);
+  roundsPerPair = signal(3);
+  kFactor = signal(32);
+  initialRating = signal(1000);
+
   // Voter chip input separators
   readonly voterSeparatorKeyCodes = [ENTER, COMMA] as const;
 
-  addVoterLabel(target: 'score' | 'multivote' | 'condorcet', event: MatChipInputEvent): void {
+  addVoterLabel(target: 'score' | 'multivote' | 'condorcet' | 'elo', event: MatChipInputEvent): void {
     const value = (event.value ?? '').trim();
     event.chipInput.clear();
     if (!value) return;
@@ -150,16 +156,17 @@ export class TournamentSetupComponent implements OnInit {
     signal.update((labels) => [...labels, value]);
   }
 
-  removeVoterLabel(target: 'score' | 'multivote' | 'condorcet', label: string): void {
+  removeVoterLabel(target: 'score' | 'multivote' | 'condorcet' | 'elo', label: string): void {
     const signal = this._voterSignal(target);
     signal.update((labels) => labels.filter((l) => l !== label));
   }
 
-  private _voterSignal(target: 'score' | 'multivote' | 'condorcet') {
+  private _voterSignal(target: 'score' | 'multivote' | 'condorcet' | 'elo') {
     switch (target) {
       case 'score': return this.scoreVoterLabels;
       case 'multivote': return this.multivoteVoterLabels;
       case 'condorcet': return this.condorcetVoterLabels;
+      case 'elo': return this.eloVoterLabels;
     }
   }
 
@@ -197,6 +204,12 @@ export class TournamentSetupComponent implements OnInit {
       label: 'Swiss',
       icon: 'leaderboard',
       description: 'Multi-round pairings with points. Each option plays ~log\u2082(N) matchups; highest total wins.',
+    },
+    {
+      value: 'elo',
+      label: 'Elo',
+      icon: 'trending_up',
+      description: 'All options play each other multiple times. Chess-style Elo ratings determine the final ranking.',
     },
   ];
 
@@ -264,6 +277,12 @@ export class TournamentSetupComponent implements OnInit {
         this.swissAllowDraws.set((config['allow_draws'] as boolean | undefined) ?? true);
         this.swissShuffleSeed.set((config['shuffle_seed'] as boolean | undefined) ?? true);
         break;
+      case 'elo':
+        this.roundsPerPair.set((config['rounds_per_pair'] as number | undefined) ?? 3);
+        this.kFactor.set((config['k_factor'] as number | undefined) ?? 32);
+        this.initialRating.set((config['initial_rating'] as number | undefined) ?? 1000);
+        this.eloVoterLabels.set([...voterLabels]);
+        break;
     }
   }
 
@@ -292,6 +311,12 @@ export class TournamentSetupComponent implements OnInit {
         this.swissTotalRounds.set(null);
         this.swissAllowDraws.set(true);
         this.swissShuffleSeed.set(true);
+        break;
+      case 'elo':
+        this.roundsPerPair.set(3);
+        this.kFactor.set(32);
+        this.initialRating.set(1000);
+        this.eloVoterLabels.set(['Voter 1']);
         break;
     }
   }
@@ -385,6 +410,14 @@ export class TournamentSetupComponent implements OnInit {
           { label: 'Rounds', value: this.swissTotalRounds() !== null ? `${this.swissTotalRounds()}` : 'Auto' },
           { label: 'Allow Draws', value: this.swissAllowDraws() ? 'Yes' : 'No' },
           { label: 'Shuffle Seed', value: this.swissShuffleSeed() ? 'Yes' : 'No' },
+        );
+        break;
+      case 'elo':
+        entries.push(
+          { label: 'Rounds per Pair', value: `${this.roundsPerPair()}` },
+          { label: 'K Factor', value: `${this.kFactor()}` },
+          { label: 'Initial Rating', value: `${this.initialRating()}` },
+          { label: 'Voters', value: this.eloVoterLabels().join(', ') },
         );
         break;
     }
@@ -595,6 +628,14 @@ export class TournamentSetupComponent implements OnInit {
           allow_draws: this.swissAllowDraws(),
           shuffle_seed: this.swissShuffleSeed(),
           voter_labels: ['default'],
+        };
+      case 'elo':
+        return {
+          ...base,
+          rounds_per_pair: this.roundsPerPair(),
+          k_factor: this.kFactor(),
+          initial_rating: this.initialRating(),
+          voter_labels: this.eloVoterLabels(),
         };
       default:
         return {};
