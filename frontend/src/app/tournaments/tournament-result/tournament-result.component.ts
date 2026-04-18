@@ -8,10 +8,19 @@ import { Tournament } from '../../models/tournament.model';
 import { ApiService } from '../../services/api.service';
 import { BracketViewComponent } from './bracket-view/bracket-view.component';
 import { PairwiseMatrixComponent } from './pairwise-matrix/pairwise-matrix.component';
+import { SwissStandingsComponent } from './swiss-standings/swiss-standings.component';
 
 @Component({
   selector: 'app-tournament-result',
-  imports: [MatCardModule, MatChipsModule, MatIconModule, MatTableModule, BracketViewComponent, PairwiseMatrixComponent],
+  imports: [
+    MatCardModule,
+    MatChipsModule,
+    MatIconModule,
+    MatTableModule,
+    BracketViewComponent,
+    PairwiseMatrixComponent,
+    SwissStandingsComponent,
+  ],
   templateUrl: './tournament-result.component.html',
   styleUrl: './tournament-result.component.scss',
 })

@@ -133,6 +133,11 @@ export class TournamentSetupComponent implements OnInit {
   // Condorcet config
   condorcetVoterLabels = signal<string[]>(['Voter 1']);
 
+  // Swiss config
+  swissTotalRounds = signal<number | null>(null);
+  swissAllowDraws = signal(true);
+  swissShuffleSeed = signal(true);
+
   // Voter chip input separators
   readonly voterSeparatorKeyCodes = [ENTER, COMMA] as const;
 
@@ -186,6 +191,12 @@ export class TournamentSetupComponent implements OnInit {
       label: 'Condorcet',
       icon: 'swap_vert',
       description: 'Every option compared head-to-head. Schulze method finds the strongest winner.',
+    },
+    {
+      value: 'swiss',
+      label: 'Swiss',
+      icon: 'leaderboard',
+      description: 'Multi-round pairings with points. Each option plays ~log\u2082(N) matchups; highest total wins.',
     },
   ];
 
@@ -248,6 +259,11 @@ export class TournamentSetupComponent implements OnInit {
       case 'condorcet':
         this.condorcetVoterLabels.set([...voterLabels]);
         break;
+      case 'swiss':
+        this.swissTotalRounds.set((config['total_rounds'] as number | null | undefined) ?? null);
+        this.swissAllowDraws.set((config['allow_draws'] as boolean | undefined) ?? true);
+        this.swissShuffleSeed.set((config['shuffle_seed'] as boolean | undefined) ?? true);
+        break;
     }
   }
 
@@ -271,6 +287,11 @@ export class TournamentSetupComponent implements OnInit {
         break;
       case 'condorcet':
         this.condorcetVoterLabels.set(['Voter 1']);
+        break;
+      case 'swiss':
+        this.swissTotalRounds.set(null);
+        this.swissAllowDraws.set(true);
+        this.swissShuffleSeed.set(true);
         break;
     }
   }
@@ -357,6 +378,13 @@ export class TournamentSetupComponent implements OnInit {
       case 'condorcet':
         entries.push(
           { label: 'Voters', value: this.condorcetVoterLabels().join(', ') },
+        );
+        break;
+      case 'swiss':
+        entries.push(
+          { label: 'Rounds', value: this.swissTotalRounds() !== null ? `${this.swissTotalRounds()}` : 'Auto' },
+          { label: 'Allow Draws', value: this.swissAllowDraws() ? 'Yes' : 'No' },
+          { label: 'Shuffle Seed', value: this.swissShuffleSeed() ? 'Yes' : 'No' },
         );
         break;
     }
@@ -559,6 +587,14 @@ export class TournamentSetupComponent implements OnInit {
         return {
           ...base,
           voter_labels: this.condorcetVoterLabels(),
+        };
+      case 'swiss':
+        return {
+          ...base,
+          total_rounds: this.swissTotalRounds(),
+          allow_draws: this.swissAllowDraws(),
+          shuffle_seed: this.swissShuffleSeed(),
+          voter_labels: ['default'],
         };
       default:
         return {};

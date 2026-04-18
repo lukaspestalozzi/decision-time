@@ -1,0 +1,29 @@
+<table mat-table [dataSource]="rows()" class="swiss-standings-table">
+  <ng-container matColumnDef="rank">
+    <th mat-header-cell *matHeaderCellDef>Rank</th>
+    <td mat-cell *matCellDef="let row">
+      @if (row.isWinner) {
+        <mat-icon class="trophy">emoji_events</mat-icon>
+      }
+      #{{ row.rank }}
+    </td>
+  </ng-container>
+  <ng-container matColumnDef="name">
+    <th mat-header-cell *matHeaderCellDef>Option</th>
+    <td mat-cell *matCellDef="let row" [class.winner]="row.isWinner">{{ row.name }}</td>
+  </ng-container>
+  <ng-container matColumnDef="points">
+    <th mat-header-cell *matHeaderCellDef>Points</th>
+    <td mat-cell *matCellDef="let row">{{ row.points }}</td>
+  </ng-container>
+  <ng-container matColumnDef="record">
+    <th mat-header-cell *matHeaderCellDef>W-D-L</th>
+    <td mat-cell *matCellDef="let row">{{ row.record }}</td>
+  </ng-container>
+  <ng-container matColumnDef="buchholz">
+    <th mat-header-cell *matHeaderCellDef>Buchholz</th>
+    <td mat-cell *matCellDef="let row">{{ row.buchholz }}</td>
+  </ng-container>
+  <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+  <tr mat-row *matRowDef="let row; columns: displayedColumns;" [class.winner-row]="row.isWinner"></tr>
+</table>
