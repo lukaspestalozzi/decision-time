@@ -23,9 +23,9 @@ with a web frontend and persists data on disk.
 - Single user, no authentication
 - Multi-ballot support for Score, Multivoting, and Condorcet modes (voter count set upfront, no identity/auth)
 - Custom voter labels (e.g., "Alice", "Bob") configurable per tournament
-- Single ballot for Bracket mode (group discusses each matchup together)
-- Four tournament modes: Bracket, Score, Multivoting, Condorcet
-- Undo/edit ballot while tournament is still active (Score, Multivote, Condorcet)
+- Single ballot for Bracket and Swiss modes (group discusses each matchup together)
+- Five tournament modes: Bracket, Score, Multivoting, Condorcet, Swiss
+- Undo/edit ballot while tournament is still active (Score, Multivote, Condorcet, Swiss)
 - Persistent storage via JSON files on disk
 - Fully testable in CI
 
@@ -37,6 +37,7 @@ with a web frontend and persists data on disk.
 | Score       | N (config) | All N ballots submitted                                       |
 | Multivoting | N (config) | All N ballots submitted                                       |
 | Condorcet   | N (config) | All N voters complete all pairwise matchups, Schulze computed |
+| Swiss       | 1 (fixed)  | All matchups in the final round decided                       |
 
 ### 1.4 Multi-Voter UX
 
@@ -50,8 +51,8 @@ tournament setup UI provides a chip input for adding voter names.
 The voting URL supports a `?voter=Alice` query param to pre-select the voter slot (user can still change it). This
 enables easy sharing between devices.
 
-For Bracket mode (single ballot), the `voter_label` is hardcoded to `"default"` — assigned automatically, invisible to
-the user. No voter selector is shown.
+For Bracket and Swiss modes (single ballot), the `voter_label` is hardcoded to `"default"` — assigned automatically,
+invisible to the user. No voter selector is shown.
 
 ---
 
@@ -92,7 +93,7 @@ A tournament is a decision process applied to a set of Options.
 | id                  | UUID              | auto     | Primary key                                                                                       |
 | name                | string            | yes      | What decision is being made (max 256 chars)                                                       |
 | description         | string            | no       | Context for the decision (no limit)                                                               |
-| mode                | TournamentMode    | yes      | bracket / score / multivote / condorcet. Editable in draft, frozen on activation.                 |
+| mode                | TournamentMode    | yes      | bracket / score / multivote / condorcet / swiss. Editable in draft, frozen on activation.         |
 | status              | TournamentStatus  | auto     | draft / active / completed / cancelled                                                            |
 | config              | JSON              | no       | Mode-specific configuration. Editable in draft, frozen on activation. Defaults provided per mode. |
 | version             | int               | auto     | Optimistic concurrency version, incremented on every write.                                       |
@@ -209,8 +210,8 @@ The shape of a vote depends on the tournament mode. All modes share a common env
 | Field         | Type       | Required | Notes                                                                            |
 |---------------|------------|----------|----------------------------------------------------------------------------------|
 | id            | UUID       | auto     | Unique within the tournament                                                     |
-| voter_label   | string     | yes      | e.g. "Alice" — must be unique per tournament (except Bracket which uses "default") |
-| round         | int        | no       | Round number (Bracket only)                                                      |
+| voter_label   | string     | yes      | e.g. "Alice" — must be unique per tournament (Bracket and Swiss use `"default"`) |
+| round         | int        | no       | Round number (Bracket and Swiss)                                                 |
 | submitted_at  | datetime   | auto     |                                                                                  |
 | payload       | JSON       | yes      | Mode-specific vote data                                                          |
 | status        | VoteStatus | auto     | `active` or `superseded` (default: `active`)                                     |
@@ -220,9 +221,9 @@ Votes are **append-only**. When a voter undoes their vote, the original record i
 `superseded_at` is set. Tournament state is recomputed by replaying only `active` votes. This preserves a full audit
 trail.
 
-For Bracket mode, multiple Vote records exist (one per matchup), all with `voter_label: "default"`. For Condorcet mode,
-multiple Vote records exist per voter (one per pairwise matchup). For ballot modes (Score, Multivote), one Vote per
-voter.
+For Bracket and Swiss modes, multiple Vote records exist (one per matchup), all with `voter_label: "default"`. For
+Condorcet mode, multiple Vote records exist per voter (one per pairwise matchup). For ballot modes (Score, Multivote),
+one Vote per voter.
 
 Duplicate `voter_label` detection: the engine rejects any ballot submission where the `voter_label` already has an
 active ballot on record. For Bracket, "complete" means all matchups in the tournament have been decided (since it's
@@ -277,6 +278,8 @@ TournamentEngine:
 
 - `{type: "bracket_matchup", entry_a, entry_b, round, round_name, match_number, matches_in_round}` — for Bracket
 - `{type: "condorcet_matchup", entry_a, entry_b, matchup_number, total_matchups}` — for Condorcet
+- `{type: "swiss_matchup", entry_a, entry_b, round, total_rounds, match_number, matches_in_round, allow_draws, standings}`
+  — for Swiss
 - `{type: "ballot", entries[], ballot_type: "score"|"multivote", ballots_submitted, ballots_required}` — for Score,
   Multivoting
 - `{type: "already_voted"}` — when the voter has already submitted
@@ -286,13 +289,15 @@ The frontend dispatches on `type`:
 
 - `"bracket_matchup"` → show one matchup with round context, call `/vote` per matchup
 - `"condorcet_matchup"` → show one matchup with overall progress, call `/vote` per matchup
+- `"swiss_matchup"` → show one matchup plus live standings; call `/vote` per matchup. Buttons: A / (Draw) / B
 - `"ballot"` → show full ballot form, call `/vote` once
 - `"already_voted"` → show ballot summary with "Edit my ballot" option (if `allow_undo` is enabled)
 - `"completed"` → show results
 
-Both Bracket and Condorcet use a matchup-based UI but with different semantics: Bracket eliminates losers round by
-round, Condorcet runs every option against every other option (round-robin). The progress indicator reflects this —
-Bracket shows "Round 2, Match 1 of 2", Condorcet shows "Matchup 3 of 10".
+Bracket, Condorcet, and Swiss all use a matchup-based UI but with different semantics: Bracket eliminates losers round
+by round, Condorcet runs every option against every other (round-robin), and Swiss pairs similarly-scored options over
+a fixed number of rounds. The progress indicator reflects this — Bracket shows "Round 2, Match 1 of 2", Condorcet shows
+"Matchup 3 of 10", Swiss shows "Round 2 of 3 — Match 1 of 2".
 
 Matchup selection is **instant** — clicking an option immediately submits the vote for that matchup (no separate confirm
 step). This streamlines the experience, especially for Condorcet where voters go through many matchups.
@@ -862,7 +867,8 @@ Used for Docker `HEALTHCHECK` and uptime monitoring. Prometheus-style metrics ma
 - `VoteAllocator` — drag/click interface for distributing multivotes.
 - `PairwiseMatrix` — visualization of Condorcet pairwise results and Schulze path strengths.
 - `ResultChart` — visualization of final rankings (bar chart, bracket tree, pairwise matrix, etc.).
-- `VoterSelector` — dropdown to pick voter slot, grays out submitted voters. Hidden for Bracket mode.
+- `VoterSelector` — dropdown to pick voter slot, grays out submitted voters. Hidden for Bracket and Swiss modes.
+- `SwissStandings` — ranked table of Swiss standings (points, W-D-L, Buchholz), rendered during voting and on result.
 - `DecisionSpinner` — cycling highlight animation widget for Quick Pick. Rapidly highlights options in sequence with
   exponential deceleration, landing on a pre-chosen random winner. Respects `prefers-reduced-motion`.
 
@@ -897,7 +903,8 @@ decision-time/
 │   │   │   ├── bracket.py
 │   │   │   ├── score.py
 │   │   │   ├── multivote.py
-│   │   │   └── condorcet.py
+│   │   │   ├── condorcet.py
+│   │   │   └── swiss.py
 │   │   ├── repositories/        # JSON file persistence layer
 │   │   │   ├── options.py
 │   │   │   └── tournaments.py
@@ -1210,8 +1217,8 @@ Preserved for traceability.
     on mode change). Frozen on activation. ✅
 10. **Draft state semantics**: Config and selected options editable. Entries created on activation. ✅
 11. **Score aggregation**: Integer scores only, simple average in v1. ✅
-12. **Engine interface**: `get_vote_context` returns tagged union (bracket_matchup, condorcet_matchup, ballot,
-    already_voted, completed). ✅
+12. **Engine interface**: `get_vote_context` returns tagged union (bracket_matchup, condorcet_matchup, swiss_matchup,
+    ballot, already_voted, completed). ✅
 13. **Search**: Filtering via `GET /options` with `q`, `tags_all`, `tags_any`. ✅
 14. **File concurrency**: File locking + optimistic concurrency on all tournament mutations. ✅
 15. **Tournament JSON growth**: Known limitation, acceptable for v1. ✅
