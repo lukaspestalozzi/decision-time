@@ -6,7 +6,13 @@ import random
 from typing import Any
 from uuid import uuid4
 
-from app.engines.base import BracketMatchupContext, CompletedContext, TournamentEngine, VoteContext
+from app.engines.base import (
+    BracketMatchupContext,
+    CompletedContext,
+    PairwiseOutcome,
+    TournamentEngine,
+    VoteContext,
+)
 from app.exceptions import ValidationError
 from app.schemas.common import BracketConfig
 from app.schemas.tournament import Result, TournamentEntry
@@ -185,6 +191,31 @@ class BracketEngine(TournamentEngine):
             ranking=ranking,
             metadata={"bracket_size": state["bracket_size"], "total_rounds": state["total_rounds"]},
         )
+
+    def extract_pairwise_outcomes(
+        self,
+        state: dict[str, Any],
+        entries: list[TournamentEntry],
+    ) -> list[PairwiseOutcome]:
+        outcomes: list[PairwiseOutcome] = []
+        for round_data in state.get("rounds", []):
+            for matchup in round_data.get("matchups", []):
+                if matchup.get("is_bye"):
+                    continue
+                winner_id = matchup.get("winner_id")
+                if winner_id is None:
+                    continue
+                a_id = matchup["entry_a_id"]
+                b_id = matchup["entry_b_id"]
+                outcomes.append(
+                    {
+                        "entry_a_id": a_id,
+                        "entry_b_id": b_id,
+                        "score_a": 1.0 if winner_id == a_id else 0.0,
+                        "source": matchup["matchup_id"],
+                    }
+                )
+        return outcomes
 
     def _try_advance_round(self, state: dict[str, Any]) -> dict[str, Any]:
         """If current round is fully decided, create next round and advance."""

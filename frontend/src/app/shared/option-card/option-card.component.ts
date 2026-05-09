@@ -23,6 +23,8 @@ export class OptionCardComponent {
     return desc.length > 120 ? desc.substring(0, 120) + '...' : desc;
   });
 
+  roundedRating = computed(() => Math.round(this.option().elo_rating ?? 0));
+
   onEdit(): void {
     this.edit.emit(this.option());
   }

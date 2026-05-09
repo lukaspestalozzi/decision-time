@@ -2,11 +2,15 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 from app.exceptions import NotFoundError
 from app.repositories.util import acquire_lock, list_dir, read_json, write_json
 from app.schemas.option import Option
+
+SortBy = Literal["created_at", "name", "elo_rating"]
+SortOrder = Literal["asc", "desc"]
 
 
 class OptionRepository:
@@ -28,14 +32,16 @@ class OptionRepository:
         q: str | None = None,
         tags_all: list[str] | None = None,
         tags_any: list[str] | None = None,
+        sort_by: SortBy = "created_at",
+        sort_order: SortOrder = "desc",
     ) -> list[Option]:
-        """List options with optional filtering.
+        """List options with optional filtering and sorting.
 
         q: case-insensitive substring match on name.
         tags_all: option must have ALL these tags (AND).
         tags_any: option must have at least ONE of these tags (OR).
-        Combined: all filters AND'd together.
-        Returns sorted by created_at descending.
+        sort_by: one of "created_at", "name", "elo_rating".
+        sort_order: "asc" or "desc".
         """
         options: list[Option] = []
         for path in list_dir(self._dir):
@@ -48,7 +54,13 @@ class OptionRepository:
             if tags_any and not set(tags_any) & set(option.tags):
                 continue
             options.append(option)
-        options.sort(key=lambda o: o.created_at, reverse=True)
+
+        if sort_by == "name":
+            options.sort(key=lambda o: o.name.lower(), reverse=(sort_order == "desc"))
+        elif sort_by == "elo_rating":
+            options.sort(key=lambda o: o.elo_rating, reverse=(sort_order == "desc"))
+        else:
+            options.sort(key=lambda o: o.created_at, reverse=(sort_order == "desc"))
         return options
 
     def create(self, option: Option) -> Option:
@@ -79,6 +91,21 @@ class OptionRepository:
                 updates["tags"] = tags
             # Re-validate to trigger tag normalization and name stripping
             option = Option.model_validate(option.model_dump() | updates)
+            write_json(path, option.model_dump(mode="json"))
+        return option
+
+    def bump_elo_rating(self, option_id: UUID, new_rating: float) -> Option:
+        """Persist a new global Elo rating without touching ``updated_at``.
+
+        Acquires the option's file lock, re-reads the JSON, sets ``elo_rating``,
+        writes atomically, returns the updated Option. Raises NotFoundError if
+        the option file is missing.
+        """
+        path = self._path(option_id)
+        with acquire_lock(path):
+            data = read_json(path)
+            data["elo_rating"] = new_rating
+            option = Option.model_validate(data)
             write_json(path, option.model_dump(mode="json"))
         return option
 

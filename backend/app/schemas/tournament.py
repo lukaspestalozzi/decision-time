@@ -70,6 +70,7 @@ class Tournament(DecisionTimeModel):
     state: dict[str, Any] = Field(default_factory=dict)
     votes: list[Vote] = Field(default_factory=list)
     result: Result | None = None
+    elo_applied: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None

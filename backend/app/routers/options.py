@@ -1,13 +1,18 @@
 """Options and Tags API endpoints."""
 
-from typing import Any
+from typing import Any, get_args
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
 
 from app.dependencies import get_option_service
+from app.exceptions import ValidationError
+from app.repositories.options import SortBy, SortOrder
 from app.services.option_service import OptionService
+
+_VALID_SORT_BY: tuple[str, ...] = get_args(SortBy)
+_VALID_SORT_ORDER: tuple[str, ...] = get_args(SortOrder)
 
 router = APIRouter(tags=["options"])
 
@@ -46,11 +51,23 @@ def list_options(
     q: str | None = None,
     tags_all: str | None = None,
     tags_any: str | None = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
     service: OptionService = Depends(get_option_service),
 ) -> list[dict[str, Any]]:
+    if sort_by not in _VALID_SORT_BY:
+        raise ValidationError(f"sort_by must be one of {list(_VALID_SORT_BY)}")
+    if sort_order not in _VALID_SORT_ORDER:
+        raise ValidationError(f"sort_order must be one of {list(_VALID_SORT_ORDER)}")
     tags_all_list = [t.strip() for t in tags_all.split(",")] if tags_all else None
     tags_any_list = [t.strip() for t in tags_any.split(",")] if tags_any else None
-    options = service.list_options(q=q, tags_all=tags_all_list, tags_any=tags_any_list)
+    options = service.list_options(
+        q=q,
+        tags_all=tags_all_list,
+        tags_any=tags_any_list,
+        sort_by=sort_by,  # type: ignore[arg-type]
+        sort_order=sort_order,  # type: ignore[arg-type]
+    )
     return [o.model_dump(mode="json") for o in options]
 
 

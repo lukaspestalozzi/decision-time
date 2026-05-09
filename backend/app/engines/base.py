@@ -1,7 +1,7 @@
 """Abstract tournament engine interface and VoteContext models."""
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 from pydantic import BaseModel
 
@@ -9,6 +9,21 @@ from app.schemas.tournament import Result, TournamentEntry
 
 if TYPE_CHECKING:
     from app.schemas.tournament import Vote
+
+
+class PairwiseOutcome(TypedDict):
+    """A single head-to-head outcome extracted from a completed tournament.
+
+    `score_a` is the actual outcome from A's perspective: 1.0 win, 0.0 loss,
+    0.5 draw. `source` is a stable identifier (matchup_id, vote-key, derived
+    pair label) used for ordering and logging — opaque to consumers.
+    """
+
+    entry_a_id: str
+    entry_b_id: str
+    score_a: float
+    source: str
+
 
 # --- VoteContext models (tagged union) ---
 
@@ -118,6 +133,19 @@ class TournamentEngine(ABC):
     @abstractmethod
     def compute_result(self, state: dict[str, Any], entries: list[TournamentEntry]) -> Result:
         """Compute final ranking and winner(s)."""
+
+    def extract_pairwise_outcomes(
+        self,
+        state: dict[str, Any],
+        entries: list[TournamentEntry],
+    ) -> list[PairwiseOutcome]:
+        """Return the pairwise comparisons produced by a completed tournament.
+
+        Used by the global option-popularity tracker to feed Elo updates. The
+        default implementation returns no outcomes; engines that produce
+        head-to-head data must override.
+        """
+        return []
 
     def replay_state(
         self,

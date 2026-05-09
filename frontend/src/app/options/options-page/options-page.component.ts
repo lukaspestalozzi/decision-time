@@ -5,9 +5,12 @@ import {
   MatDialogModule,
   MatDialogRef,
 } from '@angular/material/dialog';
+import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
 import { ApiService } from '../../services/api.service';
 import { NotificationService } from '../../services/notification.service';
 import { Option } from '../../models/option.model';
@@ -16,13 +19,27 @@ import { OptionSearchComponent, SearchCriteria } from '../../shared/option-searc
 import { OptionDialogComponent, OptionDialogResult } from '../option-dialog/option-dialog.component';
 import { BulkImportDialogComponent, BulkImportResult } from '../bulk-import-dialog/bulk-import-dialog.component';
 
+type SortKey = 'recent' | 'name' | 'popularity';
+
+const SORT_PARAMS: Record<
+  SortKey,
+  { sort_by: 'created_at' | 'name' | 'elo_rating'; sort_order: 'asc' | 'desc' }
+> = {
+  recent: { sort_by: 'created_at', sort_order: 'desc' },
+  name: { sort_by: 'name', sort_order: 'asc' },
+  popularity: { sort_by: 'elo_rating', sort_order: 'desc' },
+};
+
 @Component({
   selector: 'app-options-page',
   imports: [
+    FormsModule,
     MatDialogModule,
     MatButtonModule,
+    MatFormFieldModule,
     MatIconModule,
     MatProgressSpinnerModule,
+    MatSelectModule,
     OptionCardComponent,
     OptionSearchComponent,
   ],
@@ -37,6 +54,7 @@ export class OptionsPageComponent implements OnInit {
   options = signal<Option[]>([]);
   loading = signal(true);
   currentSearch = signal<SearchCriteria>({ q: '', tagsAll: '', tagsAny: '' });
+  sortKey = signal<SortKey>('recent');
 
   ngOnInit(): void {
     this.loadOptions();
@@ -45,7 +63,8 @@ export class OptionsPageComponent implements OnInit {
   loadOptions(): void {
     this.loading.set(true);
     const { q, tagsAll, tagsAny } = this.currentSearch();
-    this.api.listOptions(q, tagsAll, tagsAny).subscribe({
+    const { sort_by, sort_order } = SORT_PARAMS[this.sortKey()];
+    this.api.listOptions(q, tagsAll, tagsAny, sort_by, sort_order).subscribe({
       next: (options) => {
         this.options.set(options);
         this.loading.set(false);
@@ -59,6 +78,11 @@ export class OptionsPageComponent implements OnInit {
 
   onSearchChange(criteria: SearchCriteria): void {
     this.currentSearch.set(criteria);
+    this.loadOptions();
+  }
+
+  onSortChange(key: SortKey): void {
+    this.sortKey.set(key);
     this.loadOptions();
   }
 

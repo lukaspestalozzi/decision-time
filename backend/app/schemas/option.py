@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from pydantic import Field, field_validator
 
 from app.schemas.common import DecisionTimeModel, normalize_tag
+from app.utils.elo_math import GLOBAL_INITIAL_RATING
 
 
 class Option(DecisionTimeModel):
@@ -15,6 +16,7 @@ class Option(DecisionTimeModel):
     name: str = Field(..., max_length=256)
     description: str = ""
     tags: list[str] = Field(default_factory=list)
+    elo_rating: float = Field(default=GLOBAL_INITIAL_RATING)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

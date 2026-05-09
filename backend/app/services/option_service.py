@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from app.repositories.options import OptionRepository
+from app.repositories.options import OptionRepository, SortBy, SortOrder
 from app.schemas.common import normalize_tag
 from app.schemas.option import BulkCreateResult, Option
 
@@ -18,8 +18,10 @@ class OptionService:
         q: str | None = None,
         tags_all: list[str] | None = None,
         tags_any: list[str] | None = None,
+        sort_by: SortBy = "created_at",
+        sort_order: SortOrder = "desc",
     ) -> list[Option]:
-        return self._repo.list_all(q=q, tags_all=tags_all, tags_any=tags_any)
+        return self._repo.list_all(q=q, tags_all=tags_all, tags_any=tags_any, sort_by=sort_by, sort_order=sort_order)
 
     def get_option(self, option_id: UUID) -> Option:
         return self._repo.get(option_id)

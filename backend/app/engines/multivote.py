@@ -1,9 +1,17 @@
 """Multivoting tournament engine."""
 
 import copy
+from itertools import combinations
 from typing import Any
 
-from app.engines.base import AlreadyVotedContext, BallotContext, CompletedContext, TournamentEngine, VoteContext
+from app.engines.base import (
+    AlreadyVotedContext,
+    BallotContext,
+    CompletedContext,
+    PairwiseOutcome,
+    TournamentEngine,
+    VoteContext,
+)
 from app.exceptions import ValidationError
 from app.schemas.common import MultivoteConfig
 from app.schemas.tournament import Result, TournamentEntry
@@ -122,3 +130,34 @@ class MultivoteEngine(TournamentEngine):
             ranking=ranking,
             metadata={"total_ballots": state["ballots_submitted"], "total_votes_per_ballot": state["total_votes"]},
         )
+
+    def extract_pairwise_outcomes(
+        self,
+        state: dict[str, Any],
+        entries: list[TournamentEntry],
+    ) -> list[PairwiseOutcome]:
+        # Per-voter pairwise: for each ballot, every pair of entries produces
+        # one comparison based on that voter's relative allocations.
+        entry_ids = state.get("entry_ids", [])
+        outcomes: list[PairwiseOutcome] = []
+        for vote in state.get("votes", []):
+            label = vote["voter_label"]
+            allocs = {a["entry_id"]: a["votes"] for a in vote["allocations"]}
+            for a_id, b_id in combinations(entry_ids, 2):
+                va = allocs.get(a_id, 0)
+                vb = allocs.get(b_id, 0)
+                if va > vb:
+                    score_a = 1.0
+                elif va < vb:
+                    score_a = 0.0
+                else:
+                    score_a = 0.5
+                outcomes.append(
+                    {
+                        "entry_a_id": a_id,
+                        "entry_b_id": b_id,
+                        "score_a": score_a,
+                        "source": f"{label}:multivote:{a_id}:{b_id}",
+                    }
+                )
+        return outcomes

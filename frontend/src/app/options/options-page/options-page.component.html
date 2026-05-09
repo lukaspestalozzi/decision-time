@@ -12,7 +12,17 @@
   </div>
 </div>
 
-<app-option-search (searchChange)="onSearchChange($event)" />
+<div class="options-toolbar">
+  <app-option-search (searchChange)="onSearchChange($event)" />
+  <mat-form-field appearance="outline" class="sort-field">
+    <mat-label>Sort by</mat-label>
+    <mat-select [value]="sortKey()" (selectionChange)="onSortChange($event.value)">
+      <mat-option value="recent">Recently Created</mat-option>
+      <mat-option value="name">Name (A&ndash;Z)</mat-option>
+      <mat-option value="popularity">Popularity</mat-option>
+    </mat-select>
+  </mat-form-field>
+</div>
 
 @if (loading()) {
   <div class="loading-container">

@@ -13,11 +13,19 @@ export class ApiService {
 
   // --- Options ---
 
-  listOptions(q?: string, tagsAll?: string, tagsAny?: string): Observable<Option[]> {
+  listOptions(
+    q?: string,
+    tagsAll?: string,
+    tagsAny?: string,
+    sortBy?: 'created_at' | 'name' | 'elo_rating',
+    sortOrder?: 'asc' | 'desc',
+  ): Observable<Option[]> {
     let params = new HttpParams();
     if (q) params = params.set('q', q);
     if (tagsAll) params = params.set('tags_all', tagsAll);
     if (tagsAny) params = params.set('tags_any', tagsAny);
+    if (sortBy) params = params.set('sort_by', sortBy);
+    if (sortOrder) params = params.set('sort_order', sortOrder);
     return this.http.get<Option[]>(`${this.base}/options`, { params });
   }
 
