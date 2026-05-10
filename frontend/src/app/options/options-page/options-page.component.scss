@@ -12,6 +12,22 @@
   gap: 8px;
 }
 
+.options-toolbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+
+  app-option-search {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sort-field {
+    width: 200px;
+    flex: 0 0 auto;
+  }
+}
+
 .loading-container {
   display: flex;
   justify-content: center;

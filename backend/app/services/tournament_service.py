@@ -1,5 +1,6 @@
 """Tournament service — lifecycle orchestration between repos and engines."""
 
+import logging
 import secrets
 from datetime import UTC, datetime
 from typing import Any
@@ -17,6 +18,9 @@ from app.repositories.options import OptionRepository
 from app.repositories.tournaments import TournamentRepository
 from app.schemas.common import TournamentMode, TournamentStatus, get_default_config, normalize_config
 from app.schemas.tournament import Result, Tournament, TournamentEntry, Vote, VoteStatus
+from app.services.global_elo_service import GlobalEloService
+
+logger = logging.getLogger(__name__)
 
 
 class TournamentService:
@@ -26,9 +30,11 @@ class TournamentService:
         self,
         tournament_repo: TournamentRepository,
         option_repo: OptionRepository,
+        global_elo_service: GlobalEloService | None = None,
     ) -> None:
         self._repo = tournament_repo
         self._option_repo = option_repo
+        self._global_elo = global_elo_service or GlobalEloService(option_repo)
 
     def _get_engine(self, mode: TournamentMode) -> TournamentEngine:
         engines: dict[TournamentMode, TournamentEngine] = {
@@ -181,12 +187,32 @@ class TournamentService:
         tournament.state = new_state
 
         # When the last required vote arrives, finalize immediately.
-        if engine.is_complete(new_state):
+        completed_now = engine.is_complete(new_state)
+        if completed_now:
             tournament.status = TournamentStatus.COMPLETED
             tournament.completed_at = datetime.now(UTC)
             tournament.result = engine.compute_result(new_state, tournament.entries)
+            # Save-first ordering for global Elo tracker: persist with elo_applied=True
+            # BEFORE bumping option ratings. If the bump step crashes mid-way the
+            # idempotency flag still gates re-entry, so we under-count one tournament
+            # at worst rather than double-counting on retry.
+            tournament.elo_applied = True
 
-        return self._repo.save(tournament, expected_version=version)
+        saved = self._repo.save(tournament, expected_version=version)
+
+        if completed_now:
+            try:
+                self._global_elo.apply_tournament_completion(saved, engine)
+            except Exception:
+                # Bump failure must not surface to the voter as a failed vote: the
+                # vote and tournament completion are already durable. Operators can
+                # rerun manually after un-setting elo_applied.
+                logger.exception(
+                    "Global Elo bump failed for tournament %s; manual rerun required",
+                    saved.id,
+                )
+
+        return saved
 
     def undo_vote(self, tournament_id: UUID, version: int, voter_label: str) -> Tournament:
         """Soft-supersede the latest active vote for `voter_label` and replay state.

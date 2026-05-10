@@ -1,6 +1,9 @@
 <mat-card class="option-card">
   <mat-card-header>
     <mat-card-title>{{ option().name }}</mat-card-title>
+    <span class="rating-badge" aria-label="Popularity (Elo rating)" title="Popularity (Elo rating)">
+      Elo {{ roundedRating() }}
+    </span>
   </mat-card-header>
 
   <mat-card-content>

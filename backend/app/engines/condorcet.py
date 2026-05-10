@@ -10,6 +10,7 @@ from app.engines.base import (
     AlreadyVotedContext,
     CompletedContext,
     CondorcetMatchupContext,
+    PairwiseOutcome,
     TournamentEngine,
     VoteContext,
 )
@@ -215,3 +216,26 @@ class CondorcetEngine(TournamentEngine):
                 "path_strengths": schulze_result["path_strengths"],
             },
         )
+
+    def extract_pairwise_outcomes(
+        self,
+        state: dict[str, Any],
+        entries: list[TournamentEntry],
+    ) -> list[PairwiseOutcome]:
+        matchup_map = {m["matchup_id"]: m for m in state.get("matchups", [])}
+        outcomes: list[PairwiseOutcome] = []
+        for vote in state.get("votes", []):
+            matchup = matchup_map.get(vote["matchup_id"])
+            if matchup is None:
+                continue
+            a_id = matchup["entry_a_id"]
+            b_id = matchup["entry_b_id"]
+            outcomes.append(
+                {
+                    "entry_a_id": a_id,
+                    "entry_b_id": b_id,
+                    "score_a": 1.0 if vote["winner_entry_id"] == a_id else 0.0,
+                    "source": f"{vote['voter_label']}:{vote['matchup_id']}",
+                }
+            )
+        return outcomes

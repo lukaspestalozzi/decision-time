@@ -10,32 +10,18 @@ from app.engines.base import (
     AlreadyVotedContext,
     CompletedContext,
     EloMatchupContext,
+    PairwiseOutcome,
     TournamentEngine,
     VoteContext,
 )
 from app.exceptions import ValidationError
 from app.schemas.common import EloConfig
 from app.schemas.tournament import Result, TournamentEntry
+from app.utils.elo_math import apply_elo
 
 # Fixed namespace so pair_ids/matchup_ids derive deterministically from entry_ids.
 # This keeps replay_state reproducible without threading a seed through the engine.
 _ELO_NAMESPACE = UUID("6b0d4d9f-8e2a-4b1f-9c3d-1a2b3c4d5e6f")
-
-
-def _expected_score(rating_a: float, rating_b: float) -> float:
-    """Chess-style Elo expected score for A given ratings of A and B."""
-    return float(1.0 / (1.0 + 10.0 ** ((rating_b - rating_a) / 400.0)))
-
-
-def _apply_elo(rating_a: float, rating_b: float, winner_is_a: bool, k: float) -> tuple[float, float, float, float]:
-    """Apply an Elo update for a matchup with no draws.
-
-    Returns (new_a, new_b, delta_a, delta_b). Sum of deltas is zero.
-    """
-    expected_a = _expected_score(rating_a, rating_b)
-    score_a = 1.0 if winner_is_a else 0.0
-    delta_a = k * (score_a - expected_a)
-    return rating_a + delta_a, rating_b - delta_a, delta_a, -delta_a
 
 
 class EloEngine(TournamentEngine):
@@ -176,7 +162,8 @@ class EloEngine(TournamentEngine):
         k = float(state["config_snapshot"]["k_factor"])
         rating_a = ratings[a_id]
         rating_b = ratings[b_id]
-        new_a, new_b, delta_a, delta_b = _apply_elo(rating_a, rating_b, winner_is_a=(winner_entry_id == a_id), k=k)
+        score_a = 1.0 if winner_entry_id == a_id else 0.0
+        new_a, new_b, delta_a, delta_b = apply_elo(rating_a, rating_b, score_a=score_a, k=k)
         ratings[a_id] = new_a
         ratings[b_id] = new_b
 
@@ -257,3 +244,26 @@ class EloEngine(TournamentEngine):
                 "config": state["config_snapshot"],
             },
         )
+
+    def extract_pairwise_outcomes(
+        self,
+        state: dict[str, Any],
+        entries: list[TournamentEntry],
+    ) -> list[PairwiseOutcome]:
+        matchup_map = {m["matchup_id"]: m for m in state.get("matchups", [])}
+        outcomes: list[PairwiseOutcome] = []
+        for vote in state.get("votes", []):
+            matchup = matchup_map.get(vote["matchup_id"])
+            if matchup is None:
+                continue
+            a_id = matchup["entry_a_id"]
+            b_id = matchup["entry_b_id"]
+            outcomes.append(
+                {
+                    "entry_a_id": a_id,
+                    "entry_b_id": b_id,
+                    "score_a": 1.0 if vote["winner_entry_id"] == a_id else 0.0,
+                    "source": f"{vote['voter_label']}:{vote['matchup_id']}",
+                }
+            )
+        return outcomes

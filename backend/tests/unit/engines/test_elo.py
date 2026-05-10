@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from app.engines.base import AlreadyVotedContext, CompletedContext, EloMatchupContext
-from app.engines.elo import EloEngine, _apply_elo, _expected_score
+from app.engines.elo import EloEngine
 from app.exceptions import ValidationError
 from app.schemas.tournament import TournamentEntry
 
@@ -175,37 +175,6 @@ class TestEloInitialize:
         state1 = engine.initialize(entries, cfg)
         state2 = engine.initialize(entries, cfg)
         assert state1["voter_matchup_orders"] == state2["voter_matchup_orders"]
-
-
-class TestEloMath:
-    def test_expected_score_equal_ratings(self) -> None:
-        assert _expected_score(1000.0, 1000.0) == pytest.approx(0.5)
-
-    def test_expected_score_400_point_gap(self) -> None:
-        # Classic Elo figure: a 400-point-higher rating expects ~0.909
-        assert _expected_score(1400.0, 1000.0) == pytest.approx(0.909, abs=0.002)
-
-    def test_apply_elo_equal_ratings_winner_a(self) -> None:
-        new_a, new_b, da, db = _apply_elo(1000.0, 1000.0, winner_is_a=True, k=32.0)
-        assert new_a == pytest.approx(1016.0)
-        assert new_b == pytest.approx(984.0)
-        assert da == pytest.approx(16.0)
-        assert db == pytest.approx(-16.0)
-
-    def test_apply_elo_equal_ratings_winner_b(self) -> None:
-        new_a, new_b, _, _ = _apply_elo(1000.0, 1000.0, winner_is_a=False, k=32.0)
-        assert new_a == pytest.approx(984.0)
-        assert new_b == pytest.approx(1016.0)
-
-    def test_apply_elo_upset_rewards_winner(self) -> None:
-        # Low-rated B beats high-rated A — B should gain close to K
-        _, _, da, db = _apply_elo(1500.0, 1000.0, winner_is_a=False, k=32.0)
-        assert db > 28.0
-        assert da < -28.0
-
-    def test_apply_elo_sum_invariant(self) -> None:
-        _, _, da, db = _apply_elo(1234.0, 987.0, winner_is_a=True, k=32.0)
-        assert da + db == pytest.approx(0.0)
 
 
 class TestEloVoting:

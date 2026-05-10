@@ -11,7 +11,13 @@ import random
 from typing import Any
 from uuid import UUID, uuid5
 
-from app.engines.base import CompletedContext, SwissMatchupContext, TournamentEngine, VoteContext
+from app.engines.base import (
+    CompletedContext,
+    PairwiseOutcome,
+    SwissMatchupContext,
+    TournamentEngine,
+    VoteContext,
+)
 from app.exceptions import ValidationError
 from app.schemas.common import SwissConfig
 from app.schemas.tournament import Result, TournamentEntry
@@ -352,6 +358,30 @@ class SwissEngine(TournamentEngine):
                 "tiebreakers": ["points", "buchholz", "head_to_head"],
             },
         )
+
+    def extract_pairwise_outcomes(
+        self,
+        state: dict[str, Any],
+        entries: list[TournamentEntry],
+    ) -> list[PairwiseOutcome]:
+        score_map = {"a_wins": 1.0, "b_wins": 0.0, "draw": 0.5}
+        outcomes: list[PairwiseOutcome] = []
+        for round_data in state.get("rounds", []):
+            for matchup in round_data.get("matchups", []):
+                if matchup.get("is_bye"):
+                    continue
+                result = matchup.get("result")
+                if result not in score_map:
+                    continue
+                outcomes.append(
+                    {
+                        "entry_a_id": matchup["entry_a_id"],
+                        "entry_b_id": matchup["entry_b_id"],
+                        "score_a": score_map[result],
+                        "source": matchup["matchup_id"],
+                    }
+                )
+        return outcomes
 
     def _standings_snapshot(self, state: dict[str, Any]) -> list[dict[str, Any]]:
         """Sorted snapshot used by the vote context so the UI can render a live table."""
